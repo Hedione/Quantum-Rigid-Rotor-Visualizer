@@ -1,5 +1,7 @@
 # Quantum Rigid Rotor Visualizer
 
+**[Open the interactive visualizer in your browser →](https://hedione.github.io/Quantum-Rigid-Rotor-Visualizer/)**
+
 An interactive laboratory for exploring molecular rotation, quantum probability, and interference. Compare an energy-matched classical rotor, a sampled quantum ensemble, and the quantum wavefunction in three connected 3D views.
 
 The visualizer runs in the browser and includes controls for individual eigenstates, two-state superpositions, time evolution, and orientation statistics.
