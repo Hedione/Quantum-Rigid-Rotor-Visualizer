@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.tsbuildinfo
+test-results/
+playwright-report/
+.DS_Store
+*.local
+
+# Local credentials, private keys, browser sessions, and editor/agent state.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+playwright/.auth/
+.auth/
+.codex/
+.agents/
+Thumbs.db
