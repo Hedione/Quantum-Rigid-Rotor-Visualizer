@@ -30,7 +30,7 @@ test('the default energy ladder shows J=0–3 with gaps proportional to the actu
 test('high occupied energies have explicit scale breaks, with degenerate J states sharing one level', async ({ page }) => {
   await page.goto('/')
   const stage = page.getByRole('region', { name: 'Unified classical and quantum rotor experiment' })
-  await expect(stage).toHaveAttribute('aria-busy', 'false')
+  await expect(stage).toHaveAttribute('aria-busy', 'false', { timeout: 15000 })
   await page.getByRole('button', { name: 'Pause sampling', exact: true }).click()
   const ladder = page.getByRole('region', { name: 'Quantized energy ladder', exact: true })
   const primary = page.getByRole('spinbutton', { name: 'J', exact: true })

@@ -1,13 +1,15 @@
 import * as THREE from 'three'
 import { createAngularWavefunction, type CoherentState } from '../physics/superposition'
-import type { Settings } from '../types'
+import { surfaceColorMode, type Settings } from '../types'
 import { attachEvolutionAttributes, createSurfaceEvolution } from './evolving-surface'
 
-type SurfaceSettings = CoherentState & Pick<Settings, 'surfaceQuantity' | 'phaseColor'>
+type SurfaceSettings = CoherentState & Pick<Settings, 'surfaceQuantity'>
 
 export function createWavefunctionGeometry(settings: SurfaceSettings, overlay = false) {
-  const { j, m, surfaceQuantity, phaseColor } = settings
-  const secondJ = settings.superposition ? settings.j2 ?? 2 : j, secondM = settings.superposition ? settings.m2 ?? 1 : m
+  const { j, m, surfaceQuantity } = settings
+  const colorMode = overlay ? 'density' : surfaceColorMode(surfaceQuantity)
+  const paired = settings.superposition || settings.coherentTransition
+  const secondJ = paired ? settings.j2 ?? 2 : j, secondM = paired ? settings.m2 ?? 1 : m
   const width = Math.max(192, 8 * Math.abs(m), 8 * Math.abs(secondM), settings.superposition ? 8 * Math.abs(m - secondM) : 0)
   const height = Math.max(128, 8 * (j - Math.abs(m) + 1), 8 * (secondJ - Math.abs(secondM) + 1), Math.ceil(16 * Math.sqrt(Math.max(j, secondJ) + 1)))
   const mesh = new THREE.SphereGeometry(1, width, height)
@@ -38,11 +40,12 @@ export function createWavefunctionGeometry(settings: SurfaceSettings, overlay = 
       const i = row * (width + 1) + col
       // Proper rotation to lab z preserves outward face winding.
       directions.set([positions.getX(i), -positions.getZ(i), positions.getY(i)], i * 3)
-      const re = (first * cosine[col] + second * cosine2[col]) / wave.normalization, im = (first * sine[col] + second * sine2[col]) / wave.normalization
+      const re = settings.coherentTransition ? first * cosine[col] : (first * cosine[col] + second * cosine2[col]) / wave.normalization
+      const im = settings.coherentTransition ? first * sine[col] : (first * sine[col] + second * sine2[col]) / wave.normalization
       const probability = re * re + im * im
       const value = overlay || surfaceQuantity === 'probability' ? probability : surfaceQuantity === 'jointProbability' ? probability * sinTheta : surfaceQuantity === 'real' ? re : surfaceQuantity === 'imaginary' ? im : Math.hypot(re, im)
       values[i] = Math.abs(value)
-      phases[i] = surfaceQuantity === 'jointProbability' && !overlay ? 0 : phaseColor ? Math.atan2(im, re) : value < 0 ? Math.PI : 0
+      phases[i] = colorMode === 'phase' ? Math.atan2(im, re) : colorMode === 'sign' && value < 0 ? Math.PI : 0
       maximum = Math.max(maximum, Math.abs(value))
     }
   }
@@ -50,21 +53,22 @@ export function createWavefunctionGeometry(settings: SurfaceSettings, overlay = 
     const radius = maximum > 1e-12 ? 1.9 * values[i] / maximum : 0
     positions.setXYZ(i, directions[i * 3] * radius, directions[i * 3 + 1] * radius, directions[i * 3 + 2] * radius)
     color.copy(cyan).lerp(violet, (1 - Math.cos(phases[i])) / 2)
-    if (phaseColor) color.offsetHSL(Math.sin(phases[i]) * 0.07, 0, 0)
+    if (colorMode === 'phase') color.offsetHSL(Math.sin(phases[i]) * 0.07, 0, 0)
     color.toArray(colors, i * 3)
   }
   mesh.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   mesh.computeVertexNormals()
   mesh.computeBoundingSphere()
-  if (settings.superposition && !overlay) attachEvolutionAttributes(mesh, directions, firstLatitudes, secondLatitudes, width, { m, m2: secondM, normalization: wave.normalization, quantity: surfaceQuantity, phaseColor })
+  if (!overlay || settings.coherentTransition) attachEvolutionAttributes(mesh, directions, firstLatitudes, secondLatitudes, width, { m, m2: secondM, normalization: settings.coherentTransition ? 1 : wave.normalization, quantity: overlay ? 'probability' : surfaceQuantity,
+    envelope: settings.coherentTransition ? { first: Array.from(firstLatitudes), second: Array.from(secondLatitudes) } : undefined })
   return mesh
 }
 
-/** Resolve the nearest surface before shading, independent of triangle draw order. */
+/** Opaque surfaces write depth and color together; translucent surfaces resolve nearest depth first. */
 export function createWavefunctionSurface(geometry: THREE.BufferGeometry, opacity = 1, overlay = false) {
   const group = new THREE.Group()
   let depthMaterial: THREE.MeshBasicMaterial | undefined
-  if (!overlay) {
+  if (!overlay && opacity < 1) {
     depthMaterial = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true, depthTest: true, side: THREE.FrontSide })
     const depth = new THREE.Mesh(geometry, depthMaterial)
     depth.name = 'wavefunction-depth'
@@ -73,7 +77,7 @@ export function createWavefunctionSurface(geometry: THREE.BufferGeometry, opacit
   }
   const material = new THREE.MeshPhysicalMaterial({
     vertexColors: true, side: overlay ? THREE.DoubleSide : THREE.FrontSide,
-    transparent: overlay || opacity < 1, opacity: overlay ? 0.16 : opacity, depthTest: true, depthWrite: false,
+    transparent: overlay || opacity < 1, opacity: overlay ? 0.16 : opacity, depthTest: true, depthWrite: !overlay && opacity >= 1,
     roughness: 0.26, metalness: 0.12, clearcoat: 0.5,
   })
   const surface = new THREE.Mesh(geometry, material)

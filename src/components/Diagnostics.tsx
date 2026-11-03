@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from
 import { ChartNoAxesColumn, RotateCcw } from 'lucide-react'
 import { polarAngleDensity, polarDensity } from '../physics/quantum'
 import { HISTOGRAM_BINS, polarBinDensities, thetaBinDensities, type SampleStatistics } from '../physics/sampling'
-import { distributionAtPhase, type DistributionTheory } from '../physics/superposition'
+import { distributionAtMoments, distributionAtPhase, type DistributionTheory } from '../physics/superposition'
 import { HISTOGRAM_BIN_OPTIONS, DIAGNOSTICS_HZ, rebinCounts, rebinDensities } from '../physics/histograms'
 import type { StatisticsStore } from '../store/statistics'
 import { Range } from './UI'
@@ -58,7 +58,11 @@ export function Diagnostics({ j, m, stats, onReset, distribution: preparedDistri
   const [solidAngle, setSolidAngle] = useState(false)
   const [binCount, setBinCount] = useState(HISTOGRAM_BINS)
   const phase = stats.relativePhase ?? 0
-  const distribution = useMemo(() => preparedDistribution && evolving ? distributionAtPhase(preparedDistribution, cumulative ? stats.meanPhaseCosine ?? 1 : Math.cos(phase), cumulative ? stats.meanPhaseSine ?? 0 : Math.sin(phase)) : preparedDistribution, [preparedDistribution, evolving, cumulative, phase, stats.meanPhaseCosine, stats.meanPhaseSine])
+  const distribution = useMemo(() => {
+    if (!preparedDistribution || !evolving) return preparedDistribution
+    const moments = cumulative ? stats.meanMoments : stats.moments
+    return moments ? distributionAtMoments(preparedDistribution, moments) : distributionAtPhase(preparedDistribution, cumulative ? stats.meanPhaseCosine ?? 1 : Math.cos(phase), cumulative ? stats.meanPhaseSine ?? 0 : Math.sin(phase))
+  }, [preparedDistribution, evolving, cumulative, phase, stats.meanPhaseCosine, stats.meanPhaseSine, stats.moments, stats.meanMoments])
   const theory = useMemo(() => {
     if (distribution) {
       return stepCurve(rebinDensities(solidAngle ? distribution.theta : distribution.polar, binCount))

@@ -4,7 +4,7 @@ import type { EnsembleMeshes } from '../physics/instancing'
 
 export const ROTOR_PALETTES: Record<RotorPalette, { label: string; first: string; second: string; bond: string }> = {
   greenViolet: { label: 'Green / violet', first: '#00f58a', second: '#aa28ff', bond: '#286d5d' },
-  cyanCoral: { label: 'Cyan / coral', first: '#00ddff', second: '#ff685e', bond: '#347e91' },
+  blueOrange: { label: 'Blue / orange', first: '#2f9fff', second: '#ff9b32', bond: '#536d8c' },
   mint: { label: 'Single mint', first: '#54dfca', second: '#54dfca', bond: '#286d5d' },
 }
 

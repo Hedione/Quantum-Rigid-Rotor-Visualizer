@@ -47,7 +47,7 @@ function differences(a: Uint8Array, b: Uint8Array, mask?: Uint8Array) {
 const cases: Result[] = []
 let oldPipelineDifferences = 0
 for (const quantity of ['magnitude', 'probability', 'real', 'imaginary'] as const) {
-  const geometry = createWavefunctionGeometry({ j: 2, m: 1, surfaceQuantity: quantity, phaseColor: true })
+  const geometry = createWavefunctionGeometry({ j: 2, m: 1, surfaceQuantity: quantity })
   const positions = geometry.attributes.position, index = geometry.index!
   const top = geometry.clone(), reversed = geometry.clone()
   const topIndices: number[] = [], reversedIndices: number[] = []

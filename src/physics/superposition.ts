@@ -2,11 +2,27 @@ import type { Settings } from '../types'
 import { getPolarAmplitude } from './quantum'
 import { integrateGauss } from './integration'
 
-export type CoherentState = Pick<Settings, 'j' | 'm'> & Partial<Pick<Settings, 'superposition' | 'j2' | 'm2'>>
+export type CoherentState = Pick<Settings, 'j' | 'm'> & Partial<Pick<Settings, 'superposition' | 'j2' | 'm2' | 'coherentTransition'>>
+export interface Complex { re: number; im: number }
+export interface WaveCoefficients { first: Complex; second: Complex }
+export interface DensityMoments { first: number; second: number; cosine: number; sine: number }
+export const equalCoefficients: WaveCoefficients = { first: { re: Math.SQRT1_2, im: 0 }, second: { re: Math.SQRT1_2, im: 0 } }
+export const initialCoefficients: WaveCoefficients = { first: { re: 1, im: 0 }, second: { re: 0, im: 0 } }
+export function normalizeCoefficients(c: WaveCoefficients, duplicate = false): WaveCoefficients {
+  const norm = duplicate ? Math.hypot(c.first.re + c.second.re, c.first.im + c.second.im) : Math.hypot(c.first.re, c.first.im, c.second.re, c.second.im)
+  if (!(norm > 0) || !Number.isFinite(norm)) throw new RangeError('The quantum state must have a finite, nonzero norm')
+  return { first: { re: c.first.re / norm, im: c.first.im / norm }, second: { re: c.second.re / norm, im: c.second.im / norm } }
+}
+/** rho = p1|Y1|² + p2|Y2|² + A1 A2 (cosine cos Δmφ + sine sin Δmφ). */
+export function densityMoments(c: WaveCoefficients): DensityMoments {
+  return { first: c.first.re ** 2 + c.first.im ** 2, second: c.second.re ** 2 + c.second.im ** 2,
+    cosine: 2 * (c.first.re * c.second.re + c.first.im * c.second.im), sine: 2 * (c.first.re * c.second.im - c.first.im * c.second.re) }
+}
 export interface DistributionTheory {
   polar: number[]; theta: number[]; azimuth: number[]; azimuthBinned: boolean; azimuthContrast: number;
   azimuthBins?: number[]; azimuthOrder?: number;
   evolution?: { polarBase: number[]; polarCos: number[]; thetaBase: number[]; thetaCos: number[]; azimuthBase: number; azimuthCos: number[]; azimuthSin: number[]; azimuthBinCos?: number[]; azimuthBinSin?: number[] }
+  basis?: { polarFirst: number[]; polarSecond: number[]; thetaFirst: number[]; thetaSecond: number[] }
 }
 
 export function signedPolarAmplitude(j: number, m: number) {
@@ -14,21 +30,24 @@ export function signedPolarAmplitude(j: number, m: number) {
   return (u: number) => sign * amplitude(u)
 }
 
-/** Equal positive coefficients at t=0; identical terms normalize back to one eigenstate. */
+/** Shared complex-amplitude evaluator; the original mode retains equal positive weights. */
 export function createAngularWavefunction(state: CoherentState) {
-  const enabled = state.superposition ?? false, j2 = state.j2 ?? 2, m2 = state.m2 ?? 1
+  const enabled = state.superposition || state.coherentTransition, j2 = state.j2 ?? 2, m2 = state.m2 ?? 1
   const a = signedPolarAmplitude(state.j, state.m), b = enabled ? signedPolarAmplitude(j2, m2) : undefined
   const duplicate = enabled && state.j === j2 && state.m === m2
   const normalization = enabled ? duplicate ? 2 : Math.SQRT2 : 1
   const normalizationSquared = normalization * normalization
-  const polarDensity = (u: number, relativePhase = 0) => {
+  const defaults = state.coherentTransition || !enabled ? initialCoefficients : normalizeCoefficients(equalCoefficients, duplicate)
+  const polarDensity = (u: number, relativePhase = 0, coefficients = defaults) => {
     const first = a(u), second = b?.(u) ?? 0
-    return 2 * Math.PI * (first * first + second * second + (enabled && state.m === m2 ? 2 * first * second * Math.cos(relativePhase) : 0)) / normalizationSquared
+    const c = densityMoments(coefficients)
+    return 2 * Math.PI * (c.first * first * first + c.second * second * second + (enabled && state.m === m2 ? first * second * (c.cosine * Math.cos(relativePhase) - c.sine * Math.sin(relativePhase)) : 0))
   }
-  const evaluate = (u: number, phi: number, firstPhase = 0, secondPhase = 0) => {
+  const evaluate = (u: number, phi: number, firstPhase = 0, secondPhase = 0, coefficients = defaults) => {
     const first = a(u), second = b?.(u) ?? 0
-    const re = (first * Math.cos(state.m * phi - firstPhase) + second * Math.cos(m2 * phi - secondPhase)) / normalization
-    const im = (first * Math.sin(state.m * phi - firstPhase) + second * Math.sin(m2 * phi - secondPhase)) / normalization
+    const x = state.m * phi - firstPhase, y = m2 * phi - secondPhase
+    const re = first * (coefficients.first.re * Math.cos(x) - coefficients.first.im * Math.sin(x)) + second * (coefficients.second.re * Math.cos(y) - coefficients.second.im * Math.sin(y))
+    const im = first * (coefficients.first.re * Math.sin(x) + coefficients.first.im * Math.cos(x)) + second * (coefficients.second.re * Math.sin(y) + coefficients.second.im * Math.cos(y))
     return { re, im, probability: re * re + im * im, magnitude: Math.hypot(re, im), phase: Math.atan2(im, re) }
   }
   return { a, b, normalization, normalizationSquared, duplicate, polarDensity, evaluate }
@@ -53,6 +72,8 @@ export function azimuthalOverlap(state: CoherentState) {
 }
 
 export function prepareSuperpositionDistribution(state: CoherentState, bins = 40): DistributionTheory {
+  // Prepare the two basis functions once; time-dependent weights never repeat quadrature.
+  state = { ...state, superposition: state.superposition || state.coherentTransition, coherentTransition: false }
   const wave = createAngularWavefunction(state), degree = Math.max(64, state.j + 1, (state.j2 ?? 0) + 1)
   const polar = Array.from({ length: bins }, (_, i) => integrateGauss(wave.polarDensity, -1 + 2 * i / bins, -1 + 2 * (i + 1) / bins, degree) * bins / 2)
   const theta = Array.from({ length: bins }, (_, i) => integrateGauss(wave.polarDensity, Math.cos((i + 1) * Math.PI / bins), Math.cos(i * Math.PI / bins), degree) * bins / Math.PI)
@@ -80,7 +101,21 @@ export function prepareSuperpositionDistribution(state: CoherentState, bins = 40
     return delta === 0 ? 0 : interference * (Math.cos(delta * lo) - Math.cos(delta * hi)) / (delta * (hi - lo))
   })
   const evolution = wave.duplicate ? undefined : { polarBase, polarCos: polar.map((p, i) => p - polarBase[i]), thetaBase, thetaCos: theta.map((p, i) => p - thetaBase[i]), azimuthBase: base, azimuthCos: azimuth.map((_, i) => harmonic(i, false)), azimuthSin: azimuth.map((_, i) => harmonic(i, true)), azimuthBinCos: phiBins.map(p => p - base), azimuthBinSin }
-  return { polar, theta, azimuth, azimuthBinned, azimuthContrast: Math.abs(interference), azimuthBins: phiBins, azimuthOrder: Math.abs(delta), evolution }
+  const integrateBasis = (amplitude: (u: number) => number, theta: boolean) => Array.from({ length: bins }, (_, i) => integrateGauss(u => 2 * Math.PI * amplitude(u) ** 2, theta ? Math.cos((i + 1) * Math.PI / bins) : -1 + 2 * i / bins, theta ? Math.cos(i * Math.PI / bins) : -1 + 2 * (i + 1) / bins, degree) * bins / (theta ? Math.PI : 2))
+  const basis = { polarFirst: integrateBasis(wave.a, false), polarSecond: integrateBasis(wave.b ?? wave.a, false), thetaFirst: integrateBasis(wave.a, true), thetaSecond: integrateBasis(wave.b ?? wave.a, true) }
+  return { polar, theta, azimuth, azimuthBinned, azimuthContrast: Math.abs(interference), azimuthBins: phiBins, azimuthOrder: Math.abs(delta), evolution, basis }
+}
+
+/** Linear density moments also give exact theory for accumulated, unequal populations. */
+export function distributionAtMoments(theory: DistributionTheory, c: DensityMoments): DistributionTheory {
+  const e = theory.evolution, b = theory.basis
+  if (!e || !b) return theory
+  return { ...theory,
+    polar: b.polarFirst.map((p, i) => Math.max(0, c.first * p + c.second * b.polarSecond[i] + c.cosine * e.polarCos[i])),
+    theta: b.thetaFirst.map((p, i) => Math.max(0, c.first * p + c.second * b.thetaSecond[i] + c.cosine * e.thetaCos[i])),
+    azimuth: e.azimuthCos.map((p, i) => Math.max(0, e.azimuthBase + p * c.cosine + e.azimuthSin[i] * c.sine)),
+    azimuthBins: e.azimuthBinCos?.map((p, i) => Math.max(0, e.azimuthBase + p * c.cosine + (e.azimuthBinSin?.[i] ?? 0) * c.sine)),
+  }
 }
 
 /** Fourier coefficients also give the exact expected theory for accumulated times. */

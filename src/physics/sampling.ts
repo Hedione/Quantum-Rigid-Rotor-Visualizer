@@ -1,5 +1,5 @@
 import { getPolarAmplitude, LOW_J_LIMIT, validateState } from './quantum'
-import { signedPolarAmplitude } from './superposition'
+import { densityMoments, equalCoefficients, signedPolarAmplitude, type DensityMoments, type WaveCoefficients } from './superposition'
 import { HISTOGRAM_BINS, HISTOGRAM_BIN_OPTIONS, MAX_HISTOGRAM_BINS, rebinCounts } from './histograms'
 
 export const MAX_ROTORS = 10000
@@ -144,6 +144,8 @@ export function registerOrientationCDF(j: number, m: number, packed: PackedCDF) 
 }
 
 export interface SampleStatistics {
+  moments?: DensityMoments
+  meanMoments?: DensityMoments
   relativePhase?: number
   meanPhaseCosine?: number
   meanPhaseSine?: number
@@ -180,6 +182,9 @@ export class OrientationEnsemble {
   private pendingStatistics = false
   private phaseCosineSum = 0
   private phaseSineSum = 0
+  private moments = densityMoments(equalCoefficients)
+  private statisticsMoments = this.moments
+  private momentSums: DensityMoments = { first: 0, second: 0, cosine: 0, sine: 0 }
   private random: () => number
 
   constructor(j: number, m: number, seed: number, count = DEFAULT_ROTORS, secondary?: { j: number; m: number }) {
@@ -207,13 +212,14 @@ export class OrientationEnsemble {
     for (let i = start; i < end; i++) {
       let u: number, phi: number
       if (this.secondCDF) {
-        // Proposal q=(|Y1|²+|Y2|²)/2. Since |ψ|²≤2q, rejection
-        // retains the full u/phi interference with no 2D grid approximation.
+        // Proposal q=p1|Y1|²+p2|Y2|²; |ψ|²≤2q, including arbitrary
+        // complex interference. Endpoint proposals are exactly the eigenstates.
         for (;;) {
-          u = inverseCDF(this.random() < 0.5 ? this.cdf : this.secondCDF, this.random())
+          u = inverseCDF(this.random() < this.moments.first ? this.cdf : this.secondCDF, this.random())
           phi = this.random() * 2 * Math.PI
-          const a = this.firstAmplitude!(u), b = this.secondAmplitude!(u), sum = a * a + b * b
-          if (sum > 0 && this.random() * 2 * sum <= sum + 2 * a * b * Math.cos(this.deltaM * phi - this.relativePhase)) break
+          const a = this.firstAmplitude!(u), b = this.secondAmplitude!(u), sum = this.moments.first * a * a + this.moments.second * b * b
+          const angle = this.deltaM * phi
+          if (sum > 0 && this.random() * 2 * sum <= sum + a * b * (this.moments.cosine * Math.cos(angle) + this.moments.sine * Math.sin(angle))) break
         }
       } else { u = inverseCDF(this.cdf, this.random()); phi = this.random() * 2 * Math.PI }
       this.azimuths[i] = phi
@@ -240,6 +246,8 @@ export class OrientationEnsemble {
     this.phaseCosineSum += (end - start) * Math.cos(this.relativePhase)
     this.phaseSineSum += (end - start) * Math.sin(this.relativePhase)
     this.statisticsPhase = this.relativePhase
+    this.statisticsMoments = { ...this.moments }
+    for (const key of ['first', 'second', 'cosine', 'sine'] as const) this.momentSums[key] += (end - start) * this.moments[key]
   }
 
   private updateCurrentHistogram() {
@@ -258,8 +266,9 @@ export class OrientationEnsemble {
     }
   }
 
-  regenerate(relativePhase = this.relativePhase, recordStatistics = true) {
+  regenerate(relativePhase = this.relativePhase, recordStatistics = true, coefficients?: WaveCoefficients) {
     this.relativePhase = relativePhase
+    this.moments = coefficients ? densityMoments(coefficients) : { first: 0.5, second: 0.5, cosine: Math.cos(relativePhase), sine: Math.sin(relativePhase) }
     this.sampleRange(0, this.count, recordStatistics)
     this.pendingStatistics = !recordStatistics
     if (recordStatistics) this.updateCurrentHistogram()
@@ -272,11 +281,13 @@ export class OrientationEnsemble {
     this.pendingStatistics = false
     return true
   }
-  resetStatistics() { this.total = 0; this.phaseCosineSum = 0; this.phaseSineSum = 0; this.histogram.fill(0); this.azimuthHistogram.fill(0); this.thetaHistogram.fill(0); this.fine[0].fill(0); this.fine[2].fill(0); this.fine[4].fill(0) }
+  resetStatistics() { this.total = 0; this.phaseCosineSum = 0; this.phaseSineSum = 0; this.momentSums = { first: 0, second: 0, cosine: 0, sine: 0 }; this.histogram.fill(0); this.azimuthHistogram.fill(0); this.thetaHistogram.fill(0); this.fine[0].fill(0); this.fine[2].fill(0); this.fine[4].fill(0) }
   statistics(bins = HISTOGRAM_BINS): SampleStatistics {
     if (!HISTOGRAM_BIN_OPTIONS.includes(bins)) throw new RangeError('Unsupported histogram resolution')
     const read = (legacy: Float64Array, fine: number) => bins === HISTOGRAM_BINS ? Array.from(legacy) : rebinCounts(this.fine[fine], bins)
     return {
+      moments: this.statisticsMoments,
+      meanMoments: this.total ? { first: this.momentSums.first / this.total, second: this.momentSums.second / this.total, cosine: this.momentSums.cosine / this.total, sine: this.momentSums.sine / this.total } : this.statisticsMoments,
       relativePhase: this.statisticsPhase, meanPhaseCosine: this.total ? this.phaseCosineSum / this.total : Math.cos(this.statisticsPhase), meanPhaseSine: this.total ? this.phaseSineSum / this.total : Math.sin(this.statisticsPhase),
       total: this.total, histogram: read(this.histogram, 0), currentHistogram: read(this.currentHistogram, 1),
       azimuthHistogram: read(this.azimuthHistogram, 2), currentAzimuthHistogram: read(this.currentAzimuthHistogram, 3),

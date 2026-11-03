@@ -69,7 +69,7 @@ describe('coherent two-state rigid rotor', () => {
     expect(Math.abs(azimuth / total)).toBeLessThan(0.012)
   })
   it('preserves lab-frame interference and the sin(theta) Jacobian in the joint radial display', () => {
-    const state = { j: 1, m: 1, superposition: true, j2: 1, m2: -1, phaseColor: true }
+    const state = { j: 1, m: 1, superposition: true, j2: 1, m2: -1 }
     const surface = createWavefunctionGeometry({ ...state, surfaceQuantity: 'probability' })
     const position = surface.getAttribute('position'), row = 64, width = 192
     const radius = (col: number) => Math.hypot(...[0, 1, 2].map(axis => position.array[(row * (width + 1) + col) * 3 + axis]))
@@ -90,7 +90,7 @@ describe('coherent two-state rigid rotor', () => {
     surface.dispose(); real.dispose(); joint.dispose()
   })
   it('uses the lab-frame sign of the imaginary component for surface colors', () => {
-    const surface = createWavefunctionGeometry({ j: 1, m: 1, superposition: true, j2: 1, m2: -1, surfaceQuantity: 'imaginary', phaseColor: false })
+    const surface = createWavefunctionGeometry({ j: 1, m: 1, superposition: true, j2: 1, m2: -1, surfaceQuantity: 'imaginary' })
     const positions = surface.getAttribute('position'), colors = surface.getAttribute('color')
     for (const col of [48, 144]) {
       const i = 64 * 193 + col

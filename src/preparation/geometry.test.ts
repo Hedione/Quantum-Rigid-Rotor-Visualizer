@@ -3,7 +3,7 @@ import { createWavefunctionGeometry } from '../rendering/wavefunction'
 import { packGeometry, unpackGeometry } from './geometry'
 
 it('preserves surface attributes and bounds across a worker-style buffer transfer', () => {
-  const source = createWavefunctionGeometry({ j: 2, m: 1, superposition: true, j2: 1, m2: 0, surfaceQuantity: 'jointProbability', phaseColor: true })
+  const source = createWavefunctionGeometry({ j: 2, m: 1, superposition: true, j2: 1, m2: 0, surfaceQuantity: 'jointProbability' })
   const packed = packGeometry(source)
   const moved = structuredClone(packed)
   const decoded = unpackGeometry(moved)

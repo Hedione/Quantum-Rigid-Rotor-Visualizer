@@ -13,7 +13,7 @@ export const MOLECULE_PRESETS = [
   { name: 'Carbon monoxide', formula: 'CO', atomMass: 12, atomMass2: 16, asymmetricBond: true, bondLength: 1.13 },
 ] as const
 
-/** Symmetric mode links the two masses; asymmetric mode uses the independent second mass. */
+/** Match particle 1 is ON when asymmetricBond is false; otherwise mass 2 is independent. */
 export function getMolecularParameters(settings: MolecularSettings) {
   const mass1 = settings.atomMass
   const mass2 = settings.asymmetricBond ? settings.atomMass2 : mass1

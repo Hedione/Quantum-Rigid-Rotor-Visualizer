@@ -11,9 +11,8 @@ import { MAX_HISTOGRAM_BINS } from './physics/histograms'
 import { createStatisticsStore } from './store/statistics'
 import { useQuantumPreparation } from './preparation/useQuantumPreparation'
 import { selectQuantumState } from './preparation/types'
-import { defaultSettings, type Settings } from './types'
+import { defaultSettings, surfaceColorMode, type Settings } from './types'
 import { QuantumTimeline } from './physics/evolution'
-import { QuantumTime } from './components/QuantumTime'
 import { addEffect } from '@react-three/fiber'
 
 const emptyStatistics = (): SampleStatistics => ({
@@ -29,10 +28,12 @@ export default function App() {
   const { prepared, pending, error, retry } = useQuantumPreparation(settings)
   const viewSettings: Settings = { ...settings, ...(prepared?.state ?? selectQuantumState(defaultSettings)) }
   const [timeline] = useState(() => new QuantumTimeline())
-  const evolving = viewSettings.superposition && viewSettings.timeEvolution
+  const evolving = viewSettings.coherentTransition || viewSettings.timeEvolution
+  const colorMode = surfaceColorMode(viewSettings.surfaceQuantity)
+  const colorLegend = colorMode === 'phase' ? 'Complex phase · −π / 0 / +π' : colorMode === 'sign' ? 'Sign · positive / negative' : viewSettings.surfaceQuantity === 'probability' ? 'Probability density · |ψ|²' : 'Joint density · |ψ|² sin θ'
   useLayoutEffect(() => {
     timeline.configure(viewSettings, performance.now())
-  }, [timeline, viewSettings.j, viewSettings.m, viewSettings.j2, viewSettings.m2, viewSettings.superposition, viewSettings.timeEvolution, viewSettings.ensemblePaused, viewSettings.quantumPlayback, viewSettings.atomMass, viewSettings.atomMass2, viewSettings.asymmetricBond, viewSettings.bondLength])
+  }, [timeline, viewSettings.j, viewSettings.m, viewSettings.j2, viewSettings.m2, viewSettings.superposition, viewSettings.timeEvolution, viewSettings.ensemblePaused, viewSettings.quantumPlayback, viewSettings.atomMass, viewSettings.atomMass2, viewSettings.asymmetricBond, viewSettings.bondLength, viewSettings.coherentTransition, viewSettings.polarization, viewSettings.rabiFrequency, viewSettings.drivePhase, viewSettings.transitionPlaying, viewSettings.transitionProgress, viewSettings.transitionRun, viewSettings.transitionPlayback])
   // Fiber runs this once before rendering any canvas, so both quantum views
   // consume exactly the same phase even at large energy differences.
   useEffect(() => evolving ? addEffect(now => timeline.tick(now)) : undefined, [timeline, evolving])
@@ -79,7 +80,7 @@ export default function App() {
       <div className="workspace unified-workspace">
         <div className={`sidebar-shell${mobileControlsOpen ? ' is-open' : ''}`}>
           <button className="mobile-controls-toggle" type="button" aria-expanded={mobileControlsOpen} aria-controls="simulation-controls" onClick={() => setMobileControlsOpen(open => !open)}><SlidersHorizontal size={14} /> SIMULATION SETTINGS <ChevronDown size={14} /></button>
-          <Controls settings={settings} update={update} setState={setState} />
+          <Controls settings={settings} update={update} setState={setState} timeline={timeline} />
         </div>
         <div className="center-column">
           <section ref={stage} className="stage unified-stage" aria-label="Unified classical and quantum rotor experiment" aria-busy={pending} data-displayed-j={viewSettings.j} data-displayed-m={viewSettings.m} data-superposition={viewSettings.superposition} data-evolving={evolving} data-displayed-j2={viewSettings.superposition ? viewSettings.j2 : undefined} data-displayed-m2={viewSettings.superposition ? viewSettings.m2 : undefined}>
@@ -88,7 +89,7 @@ export default function App() {
             <div className="unified-scenes">
               <div className="scene-column classical-column">
               <div className="scene-pane classical-pane" data-testid="pane-classical">
-                <div className="pane-label"><Atom size={14} /><span>{viewSettings.superposition ? 'CLASSICAL ROTORS' : 'CLASSICAL ROTOR'}</span><small>{viewSettings.superposition ? 'Two component comparisons' : 'One definite orientation'}</small></div>
+                <div className="pane-label"><Atom size={14} /><span>{viewSettings.superposition ? 'CLASSICAL ROTORS' : 'CLASSICAL ROTOR'}</span></div>
                 <div className="pane-canvas"><Scene mode="classical" settings={viewSettings} prepared={prepared} onStats={onStats} id="classical" timeline={timeline} /></div>
                 <p className="pane-note">{viewSettings.superposition ? <span className="component-legend"><i />State 1 <b />State 2</span> : viewSettings.j === 0 ? 'Stationary · J = 0' : 'Continuous deterministic motion'}</p>
               </div>
@@ -96,7 +97,7 @@ export default function App() {
               </div>
               <div className="scene-column ensemble-column">
               <div className="scene-pane ensemble-pane" data-testid="pane-ensemble">
-                <div className="pane-label"><Layers3 size={15} /><span>QUANTUM PROBABILITY ENSEMBLE</span><small><i className={settings.ensemblePaused ? 'live-dot paused' : 'live-dot'} />{settings.count.toLocaleString()} independent rotors · {settings.frequency} Hz</small></div>
+                <div className="pane-label"><Layers3 size={15} /><span>QUANTUM PROBABILITY ENSEMBLE</span></div>
                 <div className="pane-canvas"><Scene mode="ensemble" settings={viewSettings} prepared={prepared} onStats={onStats} id="ensemble" onFPS={onFPS} timeline={timeline} /></div>
                 <p className="pane-note">{settings.ensemblePaused ? 'Sampling paused' : viewSettings.superposition ? 'Independent samples of |ψ|² dΩ · interference included' : 'Independent samples of |Y|² dΩ'}</p>
               </div>
@@ -104,17 +105,17 @@ export default function App() {
               </div>
               <div className="scene-column wavefunction-column">
               <div className="scene-pane wavefunction-pane" data-testid="pane-wavefunction">
-                <div className="pane-label"><Orbit size={14} /><span>WAVEFUNCTION &amp; PROBABILITY</span><small>{evolving ? <>Time evolution · <QuantumTime timeline={timeline} /></> : viewSettings.superposition ? viewSettings.j === viewSettings.j2 ? 'Stationary coherent superposition' : 'Coherent snapshot · t = 0' : 'Stationary eigenstate'}</small></div>
+                <div className="pane-label"><Orbit size={14} /><span>WAVEFUNCTION &amp; PROBABILITY</span></div>
                 <div className="pane-canvas"><Scene mode="wavefunction" settings={viewSettings} prepared={prepared} onStats={onStats} id="wavefunction" timeline={timeline} /></div>
-                <div className="pane-phase"><i style={viewSettings.surfaceQuantity === 'jointProbability' ? { background: '#54dfca' } : undefined} /><span>{viewSettings.surfaceQuantity === 'jointProbability' ? 'Joint density · |ψ|² sin θ' : 'Complex phase · −π / 0 / +π'}</span></div>
+                <div className="pane-phase" data-color-mode={colorMode}><i style={colorMode === 'density' ? { background: '#54dfca' } : colorMode === 'sign' ? { background: 'linear-gradient(90deg, #54dfca 50%, #a58bf4 50%)' } : undefined} /><span>{colorLegend}</span></div>
               </div>
               <WavefunctionControls settings={settings} update={update} />
               </div>
             </div>
-            <div className="stage-bottom"><span className="orbit-hint"><MousePointer2 size={13} /> Drag any view to orbit <i /> Scroll to zoom</span><span className="camera-status">{settings.syncCameras ? 'Cameras synchronized' : 'Independent cameras'}</span><span className="fps-indicator"><i />{fps > 0 ? `${fps} FPS` : 'WEBGL'}<span>GPU accelerated</span></span></div>
+            <div className="stage-bottom"><span className="orbit-hint"><MousePointer2 size={13} /> Drag any view to orbit <i /> Scroll to zoom</span><span className="camera-status">Cameras synchronized</span><span className="fps-indicator"><i />{fps > 0 ? `${fps} FPS` : 'WEBGL'}<span>GPU accelerated</span></span></div>
           </section>
           <Diagnostics j={viewSettings.j} m={viewSettings.m} store={statistics} frequency={settings.histogramFrequency} onFrequencyChange={value => update('histogramFrequency', value)} distribution={prepared?.distribution} evolving={evolving} onReset={() => update('resetStats', settings.resetStats + 1)} />
-          <PhysicsPanel settings={viewSettings} />
+          <PhysicsPanel settings={viewSettings} timeline={timeline} />
         </div>
       </div>
     </main>

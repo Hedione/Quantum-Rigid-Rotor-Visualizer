@@ -1,22 +1,22 @@
 import { useEffect, useRef } from 'react'
 import type { QuantumTimeline } from '../physics/evolution'
 
+/** Retain machine-readable clock state without an elapsed-time readout. */
 export function QuantumTime({ timeline }: { timeline: QuantumTimeline }) {
-  const label = useRef<HTMLSpanElement>(null)
+  const marker = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     let handle = 0, previous = -Infinity
     const tick = (now: number) => {
-      if (now - previous >= 100 && label.current) {
+      if (now - previous >= 100 && marker.current) {
         previous = now
         const frame = timeline.read(now)
-        label.current.textContent = `t = ${(frame.time * 1e12).toFixed(2)} ps`
-        label.current.dataset.time = String(frame.time)
-        label.current.dataset.relativePhase = String(frame.relativePhase)
+        marker.current.dataset.time = String(frame.time)
+        marker.current.dataset.relativePhase = String(frame.relativePhase)
       }
       handle = requestAnimationFrame(tick)
     }
     handle = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(handle)
   }, [timeline])
-  return <span ref={label} data-testid="quantum-time">t = 0.00 ps</span>
+  return <span ref={marker} hidden data-testid="quantum-time" />
 }

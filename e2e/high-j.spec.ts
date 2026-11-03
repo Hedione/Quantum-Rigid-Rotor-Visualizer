@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
 
 test('high-J demonstration narrows toward the classical plane without non-finite rendering', async ({ page }) => {
-  test.setTimeout(90000)
+  // This case includes high-J preparation, six viewport layouts, and a WebGL reset.
+  test.setTimeout(120000)
   const failures: string[] = []
   page.on('pageerror', error => failures.push(error.stack ?? error.message))
   await page.goto('/')
@@ -67,6 +68,11 @@ test('high-J demonstration narrows toward the classical plane without non-finite
     const previous = await navigation.getByRole('button', { name: 'Previous', exact: true }).boundingBox()
     const highJ = await navigation.getByRole('button', { name: 'Enable J > 10', exact: true }).boundingBox()
     const next = await navigation.getByRole('button', { name: 'Next', exact: true }).boundingBox()
+    const row = await navigation.boundingBox()
+    expect(Math.abs(highJ!.x + highJ!.width / 2 - row!.x - row!.width / 2)).toBeLessThan(1)
+    const formerWidth = row!.width - previous!.width - next!.width - 10
+    expect(highJ!.width / formerWidth).toBeGreaterThan(.42)
+    expect(highJ!.width / formerWidth).toBeLessThan(.58)
     expect(previous!.x + previous!.width).toBeLessThanOrEqual(highJ!.x)
     expect(highJ!.x + highJ!.width).toBeLessThanOrEqual(next!.x)
     expect(Math.abs(previous!.y + previous!.height / 2 - highJ!.y - highJ!.height / 2)).toBeLessThan(1)

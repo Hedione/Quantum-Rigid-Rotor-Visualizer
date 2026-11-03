@@ -58,6 +58,23 @@ describe('coherent time evolution', () => {
     expect(evolved.probability).toBeCloseTo(original.probability, 13)
     expect(Math.abs(evolved.re - original.re) + Math.abs(evolved.im - original.im)).toBeGreaterThan(0.01)
   })
+  it.each([0, 1, 3])('evolves a single J=%s eigenstate with invariant density and the correct global phase', j => {
+    const state = { ...defaultSettings, j, m: 0, superposition: false }
+    const clock = new QuantumTimeline(); clock.configure(state, 0)
+    const frame = clock.read(1000), wave = createAngularWavefunction(state)
+    expect(frame.enabled).toBe(true)
+    expect(frame.time).toBeCloseTo(QUANTUM_TIME_SCALE, 26)
+    expect(frame.firstPhase).toBeCloseTo((quantumQuantities(j, 0, inertia).energy / HBAR * frame.time) % (2 * Math.PI), 12)
+    expect(frame.secondPhase).toBe(frame.firstPhase)
+    expect(frame.relativePhase).toBe(0)
+    for (const [u, phi] of [[0.2, 0.7], [-0.6, 1.2]]) {
+      const original = wave.evaluate(u, phi), evolved = wave.evaluate(u, phi, frame.firstPhase, frame.secondPhase)
+      expect(evolved.probability).toBeCloseTo(original.probability, 13)
+      if (j > 0) expect(Math.abs(evolved.re - original.re) + Math.abs(evolved.im - original.im)).toBeGreaterThan(0.001)
+    }
+    clock.configure({ ...state, j2: 8, m2: -5 }, 1000)
+    expect(clock.read(1000).time).toBe(frame.time)
+  })
   it.each([0, Math.PI / 2, Math.PI, 1.3])('normalizes joint density and preserves analytic hemisphere interference at phase %s', phase => {
     const wave = createAngularWavefunction(settings)
     expect(integrateGauss(u => wave.polarDensity(u, phase), -1, 1)).toBeCloseTo(1, 12)

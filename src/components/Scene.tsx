@@ -11,7 +11,7 @@ import { ENSEMBLE_ATOM_RADIUS, ENSEMBLE_ATOM_RADIUS_PM, ROTOR_DISPLAY_UNITS_PER_
 import { createWavefunctionSurface } from '../rendering/wavefunction'
 import { createParticleDepthPass, ROTOR_PALETTES } from '../rendering/rotors'
 import type { PreparedQuantumState } from '../preparation/types'
-import { defaultSettings, type SceneKind, type Settings } from '../types'
+import { defaultSettings, surfaceColorMode, type SceneKind, type Settings } from '../types'
 import type { QuantumTimeline } from '../physics/evolution'
 import { MAX_HISTOGRAM_BINS } from '../physics/histograms'
 
@@ -72,7 +72,6 @@ function CameraController({ settings, id }: { settings: Settings; id: string }) 
     busy.current = false
   }, [camera, settings.cameraReset, fit])
   useEffect(() => {
-    if (!settings.syncCameras) return
     const sync = (event: Event) => {
       const detail = (event as CustomEvent<CameraDetail>).detail
       if (detail.source === id) return
@@ -84,10 +83,10 @@ function CameraController({ settings, id }: { settings: Settings; id: string }) 
     }
     SYNC.addEventListener('camera', sync)
     return () => SYNC.removeEventListener('camera', sync)
-  }, [camera, id, settings.syncCameras, fit])
+  }, [camera, id, fit])
   return <OrbitControls ref={controls} makeDefault enableDamping dampingFactor={0.12} minDistance={3.2 * fit} maxDistance={16 * fit}
     onChange={() => {
-      if (!busy.current && settings.syncCameras && controls.current) {
+      if (!busy.current && controls.current) {
         const target = controls.current.target.toArray()
         const position = camera.position.toArray().map((value, i) => target[i] + (value - target[i]) / fit)
         SYNC.dispatchEvent(new CustomEvent('camera', { detail: { source: id, position, target } }))
@@ -95,22 +94,22 @@ function CameraController({ settings, id }: { settings: Settings; id: string }) 
     }} />
 }
 
-function Laboratory({ settings }: { settings: Settings }) {
+function Laboratory() {
   return <>
     <ambientLight intensity={0.65} />
     <directionalLight position={[3, -4, 6]} intensity={2.4} color="#d4fff8" />
     <directionalLight position={[-5, 1, 3]} intensity={1.6} color="#829aff" />
     <pointLight position={[0, 4, -2]} intensity={12} color="#38bfa7" />
     <gridHelper args={[20, 40, '#263647', '#1a2839']} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -1.75]} material-transparent material-opacity={0.33} />
-    {settings.zAxis && <group name="laboratory-z-axis">
+    <group name="laboratory-z-axis">
       <Line points={[[0, 0, -2.55], [0, 0, 2.65]]} color="#91bbc4" lineWidth={0.8} transparent opacity={0.45} dashed dashSize={0.055} gapSize={0.055} />
       <AxisLabel position={[0, 0, 2.85]} hideNearTop>z</AxisLabel>
       <mesh><sphereGeometry args={[0.025, 12, 12]} /><meshBasicMaterial color="#d4fff7" /></mesh>
-    </group>}
+    </group>
   </>
 }
 
-function Surface({ geometry, overlay = false, timeline, evolving = false }: { geometry: THREE.BufferGeometry; overlay?: boolean; timeline?: QuantumTimeline; evolving?: boolean }) {
+function Surface({ geometry, overlay = false, timeline, evolving = false, coherent = false }: { geometry: THREE.BufferGeometry; overlay?: boolean; timeline?: QuantumTimeline; evolving?: boolean; coherent?: boolean }) {
   const invalidate = useThree(s => s.invalidate)
   // Keep materials/programs warm when only the prepared geometry changes.
   const animated = geometry.hasAttribute('wavePolar')
@@ -118,20 +117,26 @@ function Surface({ geometry, overlay = false, timeline, evolving = false }: { ge
   useLayoutEffect(() => {
     surface.setGeometry(geometry)
     const frame = timeline?.frame
-    surface.evolution?.setPhases(frame?.firstPhase ?? 0, frame?.secondPhase ?? 0, evolving)
+    if (coherent && frame?.coefficients) surface.evolution?.setCoefficients(frame.coefficients, true)
+    else surface.evolution?.setPhases(frame?.firstPhase ?? 0, frame?.secondPhase ?? 0, evolving)
     invalidate()
-  }, [surface, geometry, invalidate, timeline, evolving])
+  }, [surface, geometry, invalidate, timeline, evolving, coherent])
   useFrame(() => {
     if (!surface.evolution || !timeline) return
     const frame = timeline.frame
-    surface.evolution.setPhases(frame.firstPhase, frame.secondPhase, evolving && frame.enabled)
+    if (coherent && frame.coefficients) surface.evolution.setCoefficients(frame.coefficients, true)
+    else surface.evolution.setPhases(frame.firstPhase, frame.secondPhase, evolving && frame.enabled)
   })
   useEffect(() => () => surface.dispose(), [surface])
   return <primitive object={surface.group} />
 }
 
-function Nodes({ geometry }: { geometry: THREE.BufferGeometry }) {
-  return <lineSegments geometry={geometry}><lineBasicMaterial color="#e8c77d" transparent opacity={0.35} depthWrite={false} /></lineSegments>
+function Nodes({ geometry, settings, timeline }: { geometry: THREE.BufferGeometry; settings: Settings; timeline: QuantumTimeline }) {
+  const lines = useRef<THREE.LineSegments>(null)
+  useFrame(() => {
+    if (lines.current) lines.current.rotation.z = settings.timeEvolution && settings.m !== 0 && (settings.surfaceQuantity === 'real' || settings.surfaceQuantity === 'imaginary') ? timeline.frame.firstPhase / settings.m : 0
+  })
+  return <lineSegments ref={lines} geometry={geometry}><lineBasicMaterial color="#e8c77d" transparent opacity={0.35} depthWrite={false} /></lineSegments>
 }
 
 function QuantumEnsemble({ settings, onStats, timeline }: { settings: Settings; onStats: (s: SampleStatistics) => void; timeline: QuantumTimeline }) {
@@ -151,7 +156,7 @@ function QuantumEnsemble({ settings, onStats, timeline }: { settings: Settings; 
   const previousSignals = useRef({ regenerate: settings.regenerate, resetStats: settings.resetStats })
   const latest = useRef(settings)
   latest.current = settings
-  const evolving = settings.superposition && settings.timeEvolution
+  const evolving = settings.coherentTransition || (settings.superposition && settings.timeEvolution)
   const previouslyEvolving = useRef(false)
   useEffect(() => { timing.current.stats = 0 }, [settings.histogramFrequency])
 
@@ -179,15 +184,15 @@ function QuantumEnsemble({ settings, onStats, timeline }: { settings: Settings; 
   useEffect(() => { dirty.current = true }, [settings.bondLength, firstFraction, settings.ensembleAtomRadius, engine])
   useEffect(() => {
     if (evolving || previouslyEvolving.current) {
-      engine.resetStatistics(); engine.regenerate(timeline.frame.relativePhase)
+      engine.resetStatistics(); engine.regenerate(timeline.frame.relativePhase, true, settings.coherentTransition ? timeline.frame.coefficients : undefined)
       dirty.current = true; onStats(engine.statistics(MAX_HISTOGRAM_BINS))
     }
     previouslyEvolving.current = evolving
-  }, [engine, evolving, timeline, onStats, mass1, mass2, settings.bondLength])
+  }, [engine, evolving, timeline, onStats, mass1, mass2, settings.bondLength, settings.coherentTransition, settings.transitionRun, settings.drivePhase, settings.rabiFrequency, settings.polarization])
   useEffect(() => {
     if (settings.regenerate !== previousSignals.current.regenerate) {
       previousSignals.current.regenerate = settings.regenerate
-      engine.regenerate(timeline.frame.relativePhase); dirty.current = true; onStats(engine.statistics(MAX_HISTOGRAM_BINS))
+      engine.regenerate(timeline.frame.relativePhase, true, settings.coherentTransition ? timeline.frame.coefficients : undefined); dirty.current = true; onStats(engine.statistics(MAX_HISTOGRAM_BINS))
     }
   }, [engine, settings.regenerate, onStats])
   useEffect(() => {
@@ -204,7 +209,7 @@ function QuantumEnsemble({ settings, onStats, timeline }: { settings: Settings; 
     if (!settings.ensemblePaused && time.sample >= 1 / settings.frequency) {
       // Drop missed wall-clock batches after backgrounding; never stall the UI to catch up.
       time.sample %= 1 / settings.frequency
-      engine.regenerate(timeline.frame.relativePhase, false)
+      engine.regenerate(timeline.frame.relativePhase, false, settings.coherentTransition ? timeline.frame.coefficients : undefined)
       dirty.current = true
     }
     if (dirty.current) writeMatrices()
@@ -277,15 +282,15 @@ function FrameRate({ onFPS }: { onFPS: (fps: number) => void }) {
 export function Scene({ mode, settings, prepared, onStats, id, onFPS, timeline }: { prepared: PreparedQuantumState | null; mode: SceneKind; settings: Settings; onStats: (s: SampleStatistics) => void; id: string; onFPS?: (fps: number) => void; timeline: QuantumTimeline }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
-  const evolving = settings.superposition && settings.timeEvolution
+  const evolving = settings.coherentTransition || (settings.timeEvolution && (settings.j > 0 || (settings.superposition && settings.j2 > 0)) && (surfaceColorMode(settings.surfaceQuantity) !== 'density' || (settings.superposition && settings.j !== settings.j2)))
   const bondScale = settings.bondLength / defaultSettings.bondLength
   const zeroComponent = !evolving && mode === 'wavefunction' && (settings.surfaceQuantity === 'real' || settings.surfaceQuantity === 'imaginary') && prepared?.surface.boundingSphere?.radius === 0
   return <div className="canvas-container" data-testid={`scene-${mode}`} data-bond-length={settings.bondLength} data-display-scale={bondScale} data-rotor-count={mode === 'ensemble' ? settings.count : mode === 'classical' ? settings.superposition ? 2 : 1 : undefined} data-first-mass-fraction={mode !== 'wavefunction' ? getMolecularParameters(settings).firstFraction : undefined} data-particle-occlusion={mode === 'ensemble' ? settings.particleOcclusion : undefined} data-rotor-palette={mode === 'ensemble' ? settings.rotorPalette : undefined}>
     <SceneBoundary>{mounted && <Canvas frameloop={mode === 'wavefunction' && !evolving ? 'demand' : 'always'} dpr={[1, 1.5]} camera={{ position: INITIAL_CAMERA, fov: 40, near: 0.1, far: 80, up: [0, 0, 1] }} gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}>
-      <Laboratory settings={settings} />
+      <Laboratory />
       <CameraController settings={settings} id={id} />
-      {mode === 'wavefunction' && prepared && <group scale={bondScale}><Surface geometry={prepared.surface} timeline={timeline} evolving={evolving} />{prepared.nodes && <Nodes geometry={prepared.nodes} />}</group>}
-      {mode === 'ensemble' && prepared && <>{prepared.overlay && <group scale={bondScale}><Surface geometry={prepared.overlay} overlay /></group>}<QuantumEnsemble settings={settings} onStats={onStats} timeline={timeline} /></>}
+      {mode === 'wavefunction' && prepared && <group scale={bondScale}><Surface geometry={prepared.surface} timeline={timeline} evolving={evolving} coherent={settings.coherentTransition} />{prepared.nodes && <Nodes geometry={prepared.nodes} settings={settings} timeline={timeline} />}</group>}
+      {mode === 'ensemble' && prepared && <>{prepared.overlay && <group scale={bondScale}><Surface geometry={prepared.overlay} overlay timeline={timeline} evolving={settings.coherentTransition} coherent={settings.coherentTransition} /></group>}<QuantumEnsemble settings={settings} onStats={onStats} timeline={timeline} /></>}
       {mode === 'classical' && <><ClassicalRotor settings={settings} />{settings.superposition && <ClassicalRotor settings={settings} second />}</>}
       {onFPS && <FrameRate onFPS={onFPS} />}
     </Canvas>}</SceneBoundary>

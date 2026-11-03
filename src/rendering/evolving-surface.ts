@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import type { SurfaceQuantity } from '../types'
+import type { WaveCoefficients } from '../physics/superposition'
 
-export interface WaveEvolutionData { m: number; m2: number; normalization: number; maxima: [number, number, number]; quantity: SurfaceQuantity; phaseColor: boolean }
+export interface WaveEvolutionData { m: number; m2: number; normalization: number; maxima: [number, number, number]; quantity: SurfaceQuantity; envelope?: { first: number[]; second: number[] } }
 
 /** Cached complex fields and derivatives avoid recurrences, atan seam ambiguity,
  * and per-vertex trigonometric error. Each frame applies only complex rotations. */
@@ -75,7 +76,7 @@ WaveVertex evolveWave() {
   vec3 ep = vec3(-azimuth.y, azimuth.x, 0.0);
   vec3 normal = value * st * n - dr.x * st * et - dr.y * ep;
   vec2 phase = wavePhaseColor > 0.5 && magnitude > 0.000001 ? vec2(re, im) / magnitude : vec2(kind > 2.5 && (kind < 3.5 ? re : im) < 0.0 ? -1.0 : 1.0, 0.0);
-  if (kind > 1.5 && kind < 2.5) phase = vec2(1.0, 0.0);
+  if (kind > 0.5 && kind < 2.5) phase = vec2(1.0, 0.0);
   WaveVertex result;
   result.position = n * value * scale;
   result.normal = length(normal) > 0.0000001 ? normalize(normal) : n;
@@ -85,12 +86,13 @@ WaveVertex evolveWave() {
 `
 
 export function createSurfaceEvolution(materials: THREE.Material[]) {
+  let data: WaveEvolutionData
   const uniforms = {
     waveEnabled: { value: 0 }, wavePhases: { value: new THREE.Vector4(1, 0, 1, 0) }, waveModes: { value: new THREE.Vector4() }, waveMaxima: { value: new THREE.Vector3() },
     wavePhaseColor: { value: 1 }, waveCyan: { value: new THREE.Color('#54dfca') }, waveViolet: { value: new THREE.Color('#a58bf4') },
   }
   for (const material of materials) {
-    material.customProgramCacheKey = () => 'rigid-rotor-evolution-v1'
+    material.customProgramCacheKey = () => 'rigid-rotor-evolution-v2'
     material.onBeforeCompile = shader => {
       Object.assign(shader.uniforms, uniforms)
       shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${vertexEvolution}`)
@@ -102,11 +104,27 @@ export function createSurfaceEvolution(materials: THREE.Material[]) {
   }
   return {
     setGeometry(geometry: THREE.BufferGeometry) {
-      const data = geometry.userData.waveEvolution as WaveEvolutionData
+      data = geometry.userData.waveEvolution as WaveEvolutionData
       uniforms.waveModes.value.set(data.m, data.m2, data.normalization, ['magnitude', 'probability', 'jointProbability', 'real', 'imaginary'].indexOf(data.quantity))
       uniforms.waveMaxima.value.fromArray(data.maxima)
-      uniforms.wavePhaseColor.value = Number(data.phaseColor)
+      uniforms.wavePhaseColor.value = Number(data.quantity === 'magnitude')
     },
     setPhases(first: number, second: number, enabled: boolean) { uniforms.waveEnabled.value = Number(enabled); uniforms.wavePhases.value.set(Math.cos(first), Math.sin(first), Math.cos(second), Math.sin(second)) },
+    setCoefficients(c: WaveCoefficients, enabled: boolean) {
+      uniforms.waveEnabled.value = Number(enabled)
+      // rotateWave uses exp(-i phase); its cos/sin slots also carry magnitudes.
+      uniforms.wavePhases.value.set(c.first.re, -c.first.im, c.second.re, -c.second.im)
+      uniforms.waveModes.value.z = 1
+      if (data.envelope) {
+        let magnitude = 0, joint = 0
+        const { first, second } = data.envelope, a = Math.hypot(c.first.re, c.first.im), b = Math.hypot(c.second.re, c.second.im)
+        for (let row = 0; row < first.length; row++) {
+          const value = data.m === data.m2 ? Math.hypot(first[row] * c.first.re + second[row] * c.second.re, first[row] * c.first.im + second[row] * c.second.im) : Math.abs(first[row]) * a + Math.abs(second[row]) * b
+          magnitude = Math.max(magnitude, value)
+          joint = Math.max(joint, value * value * Math.sin(row * Math.PI / (first.length - 1)))
+        }
+        uniforms.waveMaxima.value.set(magnitude, magnitude * magnitude, joint)
+      }
+    },
   }
 }

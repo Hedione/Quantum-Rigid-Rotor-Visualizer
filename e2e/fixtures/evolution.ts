@@ -57,7 +57,7 @@ const mask = (group: THREE.Group) => {
 const cases: Case[] = []
 let firstJoint: Uint8Array | undefined, changedJointPixels = 0
 for (const high of [false, true]) {
-const state = { j: high ? 50 : 0, m: 0, j2: high ? 49 : 1, m2: high ? 1 : 0, superposition: true, phaseColor: false }
+const state = { j: high ? 50 : 0, m: 0, j2: high ? 49 : 1, m2: high ? 1 : 0, superposition: true }
 const wave = createAngularWavefunction(state)
 for (const quantity of (high ? ['jointProbability'] : ['magnitude', 'probability', 'jointProbability', 'real', 'imaginary']) as SurfaceQuantity[]) {
   const geometry = createWavefunctionGeometry({ ...state, surfaceQuantity: quantity }), animated = createWavefunctionSurface(geometry)
