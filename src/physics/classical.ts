@@ -24,9 +24,9 @@ export function rotorOrientation(axis: Vec3, phase: number): Vec3 {
   return e1.map((x, i) => Math.cos(phase) * x + Math.sin(phase) * e2[i]) as Vec3
 }
 
-export function atomPositions(axis: Vec3, phase: number, bondLength: number): [Vec3, Vec3] {
+export function atomPositions(axis: Vec3, phase: number, bondLength: number, firstMass = 1, secondMass = firstMass): [Vec3, Vec3] {
   const n = rotorOrientation(axis, phase)
-  return [n.map(x => x * bondLength / 2) as Vec3, n.map(x => -x * bondLength / 2) as Vec3]
+  return [n.map(x => x * bondLength * secondMass / (firstMass + secondMass)) as Vec3, n.map(x => -x * bondLength * firstMass / (firstMass + secondMass)) as Vec3]
 }
 
 /** Integrates physical time from render delta; phase stays continuous when ω changes. */

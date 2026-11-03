@@ -1,8 +1,11 @@
 import { DISPLAY_TIME_SCALE } from './classical'
-import { HBAR, molecularParameters, quantumQuantities } from './quantum'
+import { HBAR, quantumQuantities } from './quantum'
+import { getMolecularParameters, type MolecularSettings } from './molecule'
 import type { Settings } from '../types'
 
-type EvolutionSettings = Pick<Settings, 'j' | 'm' | 'j2' | 'm2' | 'superposition' | 'timeEvolution' | 'ensemblePaused' | 'quantumPlayback' | 'atomMass' | 'bondLength'>
+/** Quantum interference is five times slower than the classical display clock at nominal 1×. */
+export const QUANTUM_TIME_SCALE = DISPLAY_TIME_SCALE / 5
+type EvolutionSettings = Pick<Settings, 'j' | 'm' | 'j2' | 'm2' | 'superposition' | 'timeEvolution' | 'ensemblePaused' | 'quantumPlayback'> & MolecularSettings
 export interface QuantumFrame { time: number; firstPhase: number; secondPhase: number; relativePhase: number; enabled: boolean }
 
 /** One analytic clock for separate canvases; changing playback preserves phase. */
@@ -19,11 +22,11 @@ export class QuantumTimeline {
   configure(s: EvolutionSettings, now: number) {
     const previous = this.read(now).time
     const enabled = s.superposition && s.timeEvolution
-    const key = JSON.stringify([s.j, s.m, s.j2, s.m2, s.superposition, enabled, s.atomMass, s.bondLength])
+    const { inertia, mass1, mass2 } = getMolecularParameters(s)
+    const key = JSON.stringify([s.j, s.m, s.j2, s.m2, s.superposition, enabled, mass1, mass2, s.bondLength])
     this.time = key === this.key ? previous : 0
     this.key = key; this.anchor = now; this.enabled = enabled
-    this.speed = enabled && !s.ensemblePaused ? DISPLAY_TIME_SCALE * s.quantumPlayback / 1000 : 0
-    const { inertia } = molecularParameters(s.atomMass, s.bondLength)
+    this.speed = enabled && !s.ensemblePaused ? QUANTUM_TIME_SCALE * s.quantumPlayback / 1000 : 0
     this.firstRate = quantumQuantities(s.j, s.m, inertia).energy / HBAR
     this.secondRate = quantumQuantities(s.j2, s.m2, inertia).energy / HBAR
     this.frame = this.read(now)

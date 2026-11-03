@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultSettings } from '../types'
-import { QuantumTimeline } from './evolution'
+import { QuantumTimeline, QUANTUM_TIME_SCALE } from './evolution'
+import { DISPLAY_TIME_SCALE } from './classical'
 import { HBAR, molecularParameters, quantumQuantities } from './quantum'
 import { createAngularWavefunction, distributionAtPhase, prepareSuperpositionDistribution } from './superposition'
 import { integrateGauss } from './integration'
@@ -13,20 +14,40 @@ describe('coherent time evolution', () => {
 
   it('uses E/hbar and the physical clock, preserving time across pause and speed changes', () => {
     const clock = new QuantumTimeline(); clock.configure(settings, 1000)
-    expect(clock.read(2000).time).toBeCloseTo(1e-13, 24)
-    expect(clock.read(2000).secondPhase).toBeCloseTo(rate * 1e-13, 12)
+    expect(clock.read(2000).time).toBeCloseTo(2e-14, 24)
+    expect(clock.read(2000).secondPhase).toBeCloseTo(rate * 2e-14, 12)
     clock.tick(2000)
-    expect(clock.frame.time).toBeCloseTo(1e-13, 24)
+    expect(clock.frame.time).toBeCloseTo(2e-14, 24)
     clock.configure({ ...settings, quantumPlayback: 2 }, 2000)
-    expect(clock.read(2500).time).toBeCloseTo(2e-13, 24)
+    expect(clock.read(2500).time).toBeCloseTo(4e-14, 24)
     clock.configure({ ...settings, quantumPlayback: 2, ensemblePaused: true }, 2500)
-    expect(clock.read(9000).time).toBeCloseTo(2e-13, 24)
+    expect(clock.read(9000).time).toBeCloseTo(4e-14, 24)
     clock.configure({ ...settings, quantumPlayback: 2 }, 9000)
-    expect(clock.read(9500).time).toBeCloseTo(3e-13, 24)
+    expect(clock.read(9500).time).toBeCloseTo(6e-14, 24)
     clock.configure({ ...settings, j2: 2 }, 9500)
     expect(clock.read(9500).time).toBe(0)
     clock.configure({ ...settings, timeEvolution: false }, 10000)
     expect(clock.read(20000)).toMatchObject({ time: 0, firstPhase: 0, secondPhase: 0, enabled: false })
+  })
+  it.each([0.01, 1, 10, 100])('defaults evolution on and keeps time and phase accurate at %sx', speed => {
+    const clock = new QuantumTimeline(); clock.configure(settings, 0)
+    expect(defaultSettings.quantumPlayback).toBe(1)
+    expect(defaultSettings.timeEvolution).toBe(true)
+    expect(clock.read(1000).time / DISPLAY_TIME_SCALE).toBeCloseTo(0.2, 14)
+    clock.configure({ ...settings, quantumPlayback: speed }, 1000)
+    const before = clock.read(1000), after = clock.read(2000)
+    expect(before.time).toBeCloseTo(QUANTUM_TIME_SCALE, 25)
+    expect((after.time - before.time) / QUANTUM_TIME_SCALE).toBeCloseTo(speed, 12)
+    expect(after.secondPhase).toBeCloseTo((rate * after.time) % (2 * Math.PI), 12)
+  })
+  it('uses both masses for evolution and resets the quantum clock when the inertia changes', () => {
+    const clock = new QuantumTimeline(); clock.configure(settings, 0)
+    const original = clock.read(500)
+    clock.configure({ ...settings, asymmetricBond: true, atomMass2: 2 }, 500)
+    expect(clock.read(500).time).toBe(0)
+    const next = clock.read(1000)
+    expect(next.time).toBeCloseTo(original.time, 26)
+    expect(next.secondPhase / original.secondPhase).toBeCloseTo(0.75, 14)
   })
   it('keeps equal-J probability stationary while evolving the global complex phase', () => {
     const state = { ...settings, j: 2, m: 1, j2: 2, m2: -1 }

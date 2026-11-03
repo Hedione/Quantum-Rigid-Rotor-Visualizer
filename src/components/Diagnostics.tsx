@@ -1,4 +1,4 @@
-import { useMemo, useState, useSyncExternalStore } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { ChartNoAxesColumn, RotateCcw } from 'lucide-react'
 import { polarAngleDensity, polarDensity } from '../physics/quantum'
 import { HISTOGRAM_BINS, polarBinDensities, thetaBinDensities, type SampleStatistics } from '../physics/sampling'
@@ -12,19 +12,29 @@ function DistributionChart({ title, description, theory, bins, domain, ticks, ax
   title: string; description: string; theory: number[]; bins: number[]; domain: [number, number];
   ticks: { value: number; label: string }[]; axis: string; formula: string; className: string;
 }) {
+  const chart = useRef<SVGSVGElement>(null)
+  const [size, setSize] = useState({ width: 440, height: 200 })
+  useLayoutEffect(() => {
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      if (width > 0 && height > 0) setSize(previous => previous.width === width && previous.height === height ? previous : { width, height })
+    })
+    if (chart.current) observer.observe(chart.current)
+    return () => observer.disconnect()
+  }, [])
   const total = bins.reduce((a, b) => a + b, 0)
   const densities = bins.map(n => total > 0 ? n / total / ((domain[1] - domain[0]) / bins.length) : 0)
   const maxY = Math.max(...theory, ...densities) * 1.2
-  const W = 440, H = 140, left = 35, right = 16, top = 10, bottom = 36
+  const W = size.width, H = size.height, left = 48, right = 16, top = 10, bottom = 36
   const width = W - left - right, height = H - top - bottom
   const barWidth = width / bins.length, barGap = Math.min(2, barWidth * 0.15)
   const line = theory.map((p, i) => `${i ? 'L' : 'M'}${(left + i / (theory.length - 1) * width).toFixed(2)},${(top + height - p / maxY * height).toFixed(2)}`).join(' ')
   return <div className={`distribution-chart ${className}`}>
     <h3>{title}</h3>
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={description} data-bin-count={bins.length} data-theory-min={Math.min(...theory)} data-theory-max={Math.max(...theory)}>
-      {[0, 0.5, 1].map(t => <g key={t}><line x1={left} x2={W - right} y1={top + height * t} y2={top + height * t} stroke="#263443" strokeDasharray="3 4" /><text x={left - 7} y={top + height * t + 3} textAnchor="end">{(maxY * (1 - t)).toFixed(2)}</text></g>)}
-      {densities.map((d, i) => <rect key={i} x={left + i * barWidth + barGap / 2} y={top + height - d / maxY * height} width={barWidth - barGap} height={d / maxY * height} rx={Math.min(1, barWidth / 4)} fill="#6677bc" opacity="0.48" />)}
-      <path d={line} fill="none" stroke="#6edbc8" strokeWidth="2" />
+    <svg ref={chart} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={description} data-bin-count={bins.length} data-theory-min={Math.min(...theory)} data-theory-max={Math.max(...theory)}>
+      {[0, 0.5, 1].map(t => <g key={t}><line className="chart-grid" x1={left} x2={W - right} y1={top + height * t} y2={top + height * t} /><text x={left - 7} y={top + height * t + 3} textAnchor="end">{(maxY * (1 - t)).toFixed(2)}</text></g>)}
+      {densities.map((d, i) => <rect className="chart-sample" key={i} x={left + i * barWidth + barGap / 2} y={top + height - d / maxY * height} width={barWidth - barGap} height={d / maxY * height} />)}
+      <path className="chart-theory" d={line} fill="none" />
       {ticks.map(tick => <text key={tick.value} x={left + (tick.value - domain[0]) / (domain[1] - domain[0]) * width} y={H - 20} textAnchor="middle">{tick.label}</text>)}
       <text x={left + width / 2} y={H - 4} textAnchor="middle">{axis}</text>
     </svg>

@@ -1,5 +1,6 @@
 import { Sparkles } from 'lucide-react'
-import { ELECTRON_VOLT, HBAR, molecularParameters, quantumQuantities } from '../physics/quantum'
+import { ELECTRON_VOLT, HBAR, quantumQuantities } from '../physics/quantum'
+import { getMolecularParameters } from '../physics/molecule'
 import type { Settings } from '../types'
 import { MathText, Scientific } from './UI'
 
@@ -23,7 +24,7 @@ function EnergyLadder({ j, secondJ }: { j: number; secondJ?: number }) {
 }
 
 export function PhysicsPanel({ settings: s }: { settings: Settings }) {
-  const { inertia, reducedMass } = molecularParameters(s.atomMass, s.bondLength)
+  const { inertia } = getMolecularParameters(s)
   const q = quantumQuantities(s.j, s.m, inertia)
   const second = s.superposition ? quantumQuantities(s.j2, s.m2, inertia) : q
   const energy = (q.energy + second.energy) / 2
@@ -39,6 +40,5 @@ export function PhysicsPanel({ settings: s }: { settings: Settings }) {
       <div className="observable"><label><span>{s.superposition ? 'Mean z-projection' : 'z-projection'}</span><MathText>{s.superposition ? String.raw`\langle J_z\rangle` : 'J_z'}</MathText></label><strong><MathText>{String.raw`${projection}\,\hbar`}</MathText></strong><small><Scientific value={projection * HBAR} unit="J s" /></small></div>
     </section>
     <EnergyLadder j={s.j} secondJ={s.superposition ? s.j2 : undefined} />
-    <details className="constants"><summary>Constants & molecular model</summary><p>ℏ = {HBAR} J s<br />Atom mass = {s.atomMass} u<br />Reduced mass = <Scientific value={reducedMass} unit="kg" /><br />Bond length = {s.bondLength} Å<br />I = <Scientific value={inertia} unit="kg m²" /></p></details>
   </aside>
 }

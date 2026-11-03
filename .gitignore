@@ -20,4 +20,7 @@ playwright/.auth/
 .auth/
 .codex/
 .agents/
+AGENTS.md
+PROJECT_STYLE_GUIDE.md
+HANDOFF.md
 Thumbs.db

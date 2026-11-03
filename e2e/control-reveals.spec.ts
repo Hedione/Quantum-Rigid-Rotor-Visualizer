@@ -1,0 +1,56 @@
+import { expect, test } from '@playwright/test'
+
+declare global { interface Window { controlReveals: { id: string; duration: number }[] } }
+
+test('dependent controls fade in promptly, remain usable, and hide immediately when disabled', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.controlReveals = []
+    document.addEventListener('animationend', event => {
+      if (event.animationName === 'reveal-options') window.controlReveals.push({ id: (event.target as HTMLElement).parentElement?.id ?? '', duration: event.elapsedTime })
+    })
+  })
+  await page.goto('/')
+  await expect(page.locator('[aria-busy]')).toHaveAttribute('aria-busy', 'false')
+  await expect(page.locator('.constants')).toHaveCount(0)
+  await expect(page.getByText('Constants & molecular model', { exact: true })).toHaveCount(0)
+  await expect(page.getByText(/Both particles have the same mass|Bond length updates all three views|Presets use rounded molecular parameters/)).toHaveCount(0)
+  const superposition = page.getByRole('button', { name: 'Superposition mode', exact: true })
+  await superposition.click()
+  const secondJ = page.getByRole('spinbutton', { name: 'Second J', exact: true })
+  await expect(secondJ).toBeEnabled()
+  await secondJ.fill('3'); await secondJ.press('Enter')
+  await expect(page.locator('#superposition-controls > .option-reveal')).toHaveCSS('animation-duration', '0.18s')
+  await expect.poll(() => page.evaluate(() => window.controlReveals.filter(event => event.id === 'superposition-controls'))).toEqual([{ id: 'superposition-controls', duration: 0.18 }])
+  await superposition.click()
+  await expect(secondJ).toHaveCount(0)
+  await superposition.click()
+  await expect(secondJ).toHaveValue('3')
+  await expect.poll(() => page.evaluate(() => window.controlReveals.filter(event => event.id === 'superposition-controls').length)).toBe(2)
+  const asymmetric = page.getByRole('button', { name: 'Asymmetric bond', exact: true })
+  await asymmetric.click()
+  const mass = page.getByRole('spinbutton', { name: 'Particle 2 mass exact value', exact: true })
+  await expect(mass).toBeEnabled()
+  await mass.fill('12')
+  await expect.poll(() => page.evaluate(() => window.controlReveals.filter(event => event.id === 'asymmetric-controls'))).toEqual([{ id: 'asymmetric-controls', duration: 0.18 }])
+  await asymmetric.click()
+  await expect(mass).toHaveCount(0)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: 'SIMULATION SETTINGS', exact: true }).click()
+  await expect(page.locator('.controls-panel')).toHaveCSS('animation-name', 'reveal-options')
+  await expect(page.locator('.controls-panel')).toHaveCSS('animation-duration', '0.18s')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+})
+
+test('reduced motion reveals dependent controls without animation', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
+  await expect(page.locator('#superposition-controls > .option-reveal')).toHaveCSS('animation-name', 'none')
+  await expect(page.getByRole('spinbutton', { name: 'Second J', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'Asymmetric bond', exact: true }).click()
+  await expect(page.locator('#asymmetric-controls > .option-reveal')).toHaveCSS('animation-name', 'none')
+  await expect(page.getByRole('spinbutton', { name: 'Particle 2 mass exact value', exact: true })).toBeEnabled()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: 'SIMULATION SETTINGS', exact: true }).click()
+  await expect(page.locator('.controls-panel')).toHaveCSS('animation-name', 'none')
+})

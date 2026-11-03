@@ -1,4 +1,3 @@
-import * as Switch from '@radix-ui/react-switch'
 import katex from 'katex'
 import { ChevronDown, Minus, Plus } from 'lucide-react'
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
@@ -9,26 +8,46 @@ export function MathText({ children, block = false }: { children: string; block?
   return <span className={block ? 'math-block' : 'math'} role="math" aria-label={children} dangerouslySetInnerHTML={{ __html: html }} />
 }
 
-export function Toggle({ label, checked, onChange, hint, ariaLabel }: { label: ReactNode; checked: boolean; onChange: (value: boolean) => void; hint?: string; ariaLabel?: string }) {
-  return <label className="toggle-row"><span>{label}{hint && <small>{hint}</small>}</span><Switch.Root className="switch" checked={checked} onCheckedChange={onChange} aria-label={ariaLabel ?? (typeof label === 'string' ? label : undefined)}><Switch.Thumb className="switch-thumb" /></Switch.Root></label>
+export function Toggle({ label, checked, onChange, hint, ariaLabel, controls, eyebrow }: { label: ReactNode; checked: boolean; onChange: (value: boolean) => void; hint?: ReactNode; ariaLabel?: string; controls?: string; eyebrow?: string }) {
+  const hintId = useId()
+  return <button type="button" className="toggle-button" aria-pressed={checked} aria-expanded={controls ? checked : undefined} aria-controls={controls} aria-describedby={hint ? hintId : undefined} aria-label={ariaLabel ?? (typeof label === 'string' ? label : undefined)} onClick={() => onChange(!checked)}>
+    <span className="toggle-title">{eyebrow && <span className="section-number">{eyebrow}</span>}<span className="toggle-label">{label}</span><span className="toggle-state" aria-hidden="true">{checked ? 'ON' : 'OFF'}</span></span>
+    {hint && <span className="toggle-hint" id={hintId}>{hint}</span>}
+  </button>
 }
 
-export function Range({ label, value, resetValue, min, max, step = 1, onChange, display, suffix, input = false, disabled = false, logarithmic = false, minLabel, maxLabel, hideLabel = false, options }: {
+export function Range({ label, value, resetValue, min, max, step = 1, onChange, display, suffix, input = false, disabled = false, logarithmic, minLabel, maxLabel, hideLabel = false, options, hint, companion }: {
   label: string; value: number; resetValue: number; min: number; max: number; step?: number;
   onChange: (value: number) => void; display?: string; suffix?: string; input?: boolean; disabled?: boolean;
   logarithmic?: boolean; minLabel?: string; maxLabel?: string; hideLabel?: boolean;
-  options?: readonly number[];
+  options?: readonly number[]; hint?: ReactNode; companion?: ReactNode;
 }) {
+  const hintId = useId()
+  const isLogarithmic = !options && (logarithmic ?? (min > 0 && max / min >= 100))
   const update = (n: number) => { if (Number.isFinite(n)) onChange(Math.min(max, Math.max(min, Number((Math.round(n / step) * step).toPrecision(12))))) }
   const optionIndex = options?.indexOf(value) ?? 0
-  const position = options ? optionIndex / (options.length - 1) : max === min ? 0 : logarithmic ? logPosition(value, min, max) : (value - min) / (max - min)
-  return <div className={`range-control ${disabled ? 'disabled' : ''}`}>
+  const position = options ? optionIndex / (options.length - 1) : max === min ? 0 : isLogarithmic ? logPosition(value, min, max) : (value - min) / (max - min)
+  const nativeValue = options ? optionIndex : isLogarithmic ? Math.round(position * 10000) : value
+  const rangeInput = useRef<HTMLInputElement>(null)
+  useLayoutEffect(() => {
+    // Native clamping after a bounds change can leave React's value tracking stale.
+    // Synchronize through the public value setter so the next user input is observed.
+    if (rangeInput.current) rangeInput.current.value = String(nativeValue)
+  }, [nativeValue, min, max])
+  return <div className={`range-control ${disabled ? 'disabled' : ''} ${companion ? 'range-with-companion' : ''}`}>
     {!hideLabel && <div className="control-label"><span>{label}</span>{input ? <div className="number-field"><input type="number" aria-label={`${label} exact value`} min={min} max={max} step={step} value={value} onChange={e => { if (e.target.value !== '') update(e.target.valueAsNumber) }} disabled={disabled} />{suffix}</div> : <output>{display ?? value}{suffix && <span> {suffix}</span>}</output>}</div>}
-    <input type="range" aria-label={label} aria-valuemin={min} aria-valuemax={max} aria-valuenow={value} aria-valuetext={display ?? `${value.toLocaleString()}${suffix ?? ''}`} title="Double-click to reset to default"
-      data-scale={options ? 'discrete' : logarithmic ? 'logarithmic' : 'linear'} min={options || logarithmic ? 0 : min} max={options ? options.length - 1 : logarithmic ? 10000 : max} step={options || logarithmic ? 1 : step} value={options ? optionIndex : logarithmic ? Math.round(position * 10000) : value} disabled={disabled}
-      onChange={e => update(options ? options[e.target.valueAsNumber] : logarithmic ? logValue(e.target.valueAsNumber / 10000, min, max) : e.target.valueAsNumber)} onDoubleClick={() => { if (!disabled) update(resetValue) }} style={{ '--range-progress': `${position * 100}%` } as React.CSSProperties} />
-    <div className="range-bounds"><span>{minLabel ?? min.toLocaleString()}</span>{logarithmic && <span className="range-scale">Log scale</span>}<span>{maxLabel ?? `${max.toLocaleString()}${suffix ? ` ${suffix}` : ''}`}</span></div>
+    <input ref={rangeInput} type="range" aria-label={label} aria-describedby={hint ? hintId : undefined} aria-valuemin={min} aria-valuemax={max} aria-valuenow={value} aria-valuetext={display ?? `${value.toLocaleString()}${suffix ?? ''}`} title="Double-click to reset to default"
+      data-scale={options ? 'discrete' : isLogarithmic ? 'logarithmic' : 'linear'} min={options || isLogarithmic ? 0 : min} max={options ? options.length - 1 : isLogarithmic ? 10000 : max} step={options || isLogarithmic ? 1 : step} value={nativeValue} disabled={disabled}
+      onChange={e => update(options ? options[e.target.valueAsNumber] : isLogarithmic ? logValue(e.target.valueAsNumber / 10000, min, max) : e.target.valueAsNumber)} onDoubleClick={() => { if (!disabled) update(resetValue) }} style={{ '--range-progress': `${position * 100}%` } as React.CSSProperties} />
+    <div className="range-bounds"><span>{minLabel ?? min.toLocaleString()}</span>{isLogarithmic && <span className="range-scale">Log scale</span>}<span>{maxLabel ?? `${max.toLocaleString()}${suffix ? ` ${suffix}` : ''}`}</span></div>
+    {hint && <div className="range-hint" id={hintId}>{hint}</div>}
+    {companion && <div className="range-companion">{companion}</div>}
   </div>
+}
+
+/** Mount controls immediately; animate only their appearance, keeping focus and input available. */
+export function Reveal({ show, id, children }: { show: boolean; id?: string; children: ReactNode }) {
+  return <div id={id} hidden={!show}>{show && <div className="option-reveal">{children}</div>}</div>
 }
 
 export function Stepper({ label, value, min, max, onChange, ariaLabel }: { label: ReactNode; value: number; min: number; max: number; onChange: (n: number) => void; ariaLabel?: string }) {
@@ -85,10 +104,10 @@ export function ControlSection({ title, eyebrow, children, defaultOpen = true }:
   return <details className="control-section" open={defaultOpen}><summary>{eyebrow && <span className="section-number">{eyebrow}</span>}<span>{title}</span><ChevronDown size={14} /></summary><div className="section-body">{children}</div></details>
 }
 
-export function PermanentControlSection({ title, eyebrow, children, action }: { title: string; eyebrow?: string; children?: ReactNode; action?: ReactNode }) {
+export function PermanentControlSection({ title, eyebrow, children }: { title: string; eyebrow?: string; children?: ReactNode }) {
   const headingId = useId()
   return <section className="control-section permanent-control-section" aria-labelledby={headingId}>
-    <div className="control-section-heading">{eyebrow && <span className="section-number">{eyebrow}</span>}<h2 id={headingId}>{title}</h2>{action}</div>
+    <div className="control-section-heading">{eyebrow && <span className="section-number">{eyebrow}</span>}<h2 id={headingId}>{title}</h2></div>
     {children && <div className="section-body">{children}</div>}
   </section>
 }

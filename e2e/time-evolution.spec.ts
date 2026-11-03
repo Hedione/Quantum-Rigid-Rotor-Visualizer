@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { build } from 'esbuild'
 import { resolve } from 'node:path'
 import { HBAR, molecularParameters, quantumQuantities } from '../src/physics/quantum'
-import { DISPLAY_TIME_SCALE } from '../src/physics/classical'
+import { QUANTUM_TIME_SCALE } from '../src/physics/evolution'
 
 declare global { interface Window { evolutionTestTime: number; evolutionRequests: number } }
 
@@ -46,9 +46,9 @@ test('time evolution synchronizes sampled interference and the surface, and paus
   const stage = page.getByRole('region', { name: 'Unified classical and quantum rotor experiment' })
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await page.getByRole('button', { name: 'Pause sampling', exact: true }).click()
-  await page.getByRole('button', { name: 'Enable', exact: true }).click()
-  const toggle = page.getByRole('switch', { name: 'Evolve in time', exact: true })
-  await expect(toggle).not.toBeChecked()
+  await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
+  const toggle = page.getByRole('button', { name: 'Evolve in time', exact: true })
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
   for (const [name, value] of [['J', '0'], ['Second J', '1'], ['Second mJ', '0']]) {
     const input = page.getByRole('spinbutton', { name, exact: true }); await input.fill(value); await input.press('Enter')
   }
@@ -56,8 +56,14 @@ test('time evolution synchronizes sampled interference and the surface, and paus
   await expect(stage).toHaveAttribute('data-displayed-m2', '0')
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   const preparationCount = await page.evaluate(() => window.evolutionRequests)
-  await toggle.click()
   await expect(stage).toHaveAttribute('data-evolving', 'true')
+  const speed = page.getByRole('slider', { name: 'Evolution playback speed', exact: true })
+  await expect(speed).toHaveAttribute('aria-valuenow', '1')
+  await expect(speed).toHaveAttribute('aria-valuemax', '100')
+  await speed.focus(); await speed.press('End')
+  await expect(speed).toHaveAttribute('aria-valuenow', '100')
+  await speed.dblclick()
+  await expect(speed).toHaveAttribute('aria-valuenow', '1')
   const readout = page.getByTestId('quantum-time')
   await expect(readout).toHaveAttribute('data-time', '0')
   const surface = page.getByTestId('scene-wavefunction').locator('canvas')
@@ -69,7 +75,7 @@ test('time evolution synchronizes sampled interference and the surface, and paus
   expect(await meanU()).toBeGreaterThan(0.5)
   await page.getByRole('button', { name: 'Resume sampling', exact: true }).click()
   const { inertia } = molecularParameters(1, 0.74), rate = quantumQuantities(1, 0, inertia).energy / HBAR
-  const halfBeatMs = Math.PI / rate / DISPLAY_TIME_SCALE * 1000
+  const halfBeatMs = Math.PI / rate / QUANTUM_TIME_SCALE * 1000
   await page.evaluate(delta => { window.evolutionTestTime += delta }, halfBeatMs)
   await expect.poll(meanU).toBeLessThan(-0.5)
   await expect.poll(async () => Number(await readout.getAttribute('data-time'))).toBeGreaterThan(0)
@@ -85,6 +91,7 @@ test('time evolution synchronizes sampled interference and the surface, and paus
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
   await page.screenshot({ path: 'test-results/time-evolution-mobile.png', fullPage: true })
+  await page.getByRole('button', { name: 'SIMULATION SETTINGS', exact: true }).click()
   await toggle.click()
   await expect(stage).toHaveAttribute('data-evolving', 'false')
   await expect(readout).toHaveCount(0)

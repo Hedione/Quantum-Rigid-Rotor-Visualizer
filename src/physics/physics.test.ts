@@ -101,13 +101,13 @@ describe('Monte Carlo sampling over solid angle', () => {
     expect(a.total).toBe(0)
     expect(a.currentHistogram.reduce((x, y) => x + y, 0)).toBe(2000)
   })
-  it('updates all three live InstancedMesh draw counts from 1 to 5000 and back', () => {
+  it('updates all three live InstancedMesh draw counts from 1 to 10000 and back', () => {
     const engine = new OrientationEnsemble(1, 0, 42)
     const geometry = new THREE.SphereGeometry(), material = new THREE.MeshBasicMaterial()
     const make = () => new THREE.InstancedMesh(geometry, material, MAX_ROTORS)
     const meshes = { rods: make(), atomsA: make(), atomsB: make() }
     const object = new THREE.Object3D(), vector = new THREE.Vector3()
-    for (const count of [1, 10, 100, 500, 2000, 5000, 17, 1]) {
+    for (const count of [1, 10, 100, 500, 2500, 5000, 10000, 17, 1]) {
       engine.setCount(count)
       updateEnsembleMeshes(engine, meshes, 1.65, object, vector)
       for (const mesh of Object.values(meshes)) expect(mesh.count).toBe(count)

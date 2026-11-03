@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { logPosition, logValue } from './scales'
 
 describe('logarithmic controls', () => {
-  it.each([[1, 5000], [0.005, 0.75]])('maps endpoints and the geometric midpoint for [%s, %s]', (min, max) => {
+  it.each([[1, 10000], [0.005, 0.75], [0.01, 100]])('maps endpoints and the geometric midpoint for [%s, %s]', (min, max) => {
     expect(logValue(0, min, max)).toBe(min)
     expect(logValue(1, min, max)).toBe(max)
     expect(logValue(0.5, min, max)).toBeCloseTo(Math.sqrt(min * max), 12)

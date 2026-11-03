@@ -129,12 +129,14 @@ export function quantumQuantities(j: number, m: number, inertia: number) {
   return { energy, angularMomentum, projection: m * HBAR, omega, period: omega === 0 ? Infinity : 2 * Math.PI / omega }
 }
 
-/** Equal atom masses, in u, and bond length, in Å; I = μ r², μ = m_atom / 2. */
-export function molecularParameters(atomMass: number, bondLength: number) {
-  if (!(atomMass > 0) || !(bondLength > 0) || !Number.isFinite(atomMass + bondLength)) throw new RangeError('Positive molecular parameters required')
-  const reducedMass = atomMass * ATOMIC_MASS / 2
+/** Masses in u, separation in Å; the rotation center is the physical center of mass. */
+export function molecularParameters(atomMass: number, bondLength: number, secondAtomMass = atomMass) {
+  if (!(atomMass > 0) || !(secondAtomMass > 0) || !(bondLength > 0) || !Number.isFinite(atomMass + secondAtomMass + bondLength)) throw new RangeError('Positive molecular parameters required')
+  const firstFraction = secondAtomMass / (atomMass + secondAtomMass)
+  const secondFraction = atomMass / (atomMass + secondAtomMass)
+  const reducedMass = atomMass * firstFraction * ATOMIC_MASS
   const separation = bondLength * ANGSTROM
-  return { reducedMass, separation, inertia: reducedMass * separation * separation }
+  return { reducedMass, separation, inertia: reducedMass * separation * separation, firstFraction, secondFraction }
 }
 
 export function adjacentState(j: number, m: number, direction: -1 | 1, maximum = MAX_J): [number, number] {
