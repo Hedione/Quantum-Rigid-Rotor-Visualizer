@@ -1,4 +1,4 @@
-import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Line, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
@@ -9,16 +9,18 @@ import { getMolecularParameters } from '../physics/molecule'
 import { MAX_ROTORS, OrientationEnsemble, type SampleStatistics } from '../physics/sampling'
 import { ENSEMBLE_ATOM_RADIUS, ENSEMBLE_ATOM_RADIUS_PM, ROTOR_DISPLAY_UNITS_PER_ANGSTROM, updateEnsembleMeshes } from '../physics/instancing'
 import { createWavefunctionSurface } from '../rendering/wavefunction'
-import { createParticleDepthPass, ROTOR_PALETTES } from '../rendering/rotors'
+import { createParticleDepthPass, getRotorPalette } from '../rendering/rotors'
 import type { PreparedQuantumState } from '../preparation/types'
 import { defaultSettings, surfaceColorMode, type SceneKind, type Settings } from '../types'
 import type { QuantumTimeline } from '../physics/evolution'
 import { MAX_HISTOGRAM_BINS } from '../physics/histograms'
+import { dipoleExpectation, electricField, electromagneticWave, transitionDipole, transitionRates, validateTransition } from '../physics/transition'
+import { initialCoefficients } from '../physics/superposition'
+import { applyCameraView, CAMERA_FOV, INITIAL_CAMERA, orthographicViewZoom, readCameraView, type CameraView } from '../rendering/camera'
 
-const INITIAL_CAMERA: Vec3 = [4.4, -6.3, 3.7]
 const Y_AXIS = new THREE.Vector3(0, 1, 0)
 const SYNC = new EventTarget()
-interface CameraDetail { source: string; position: number[]; target: number[] }
+interface CameraDetail extends CameraView { source: string }
 
 /** Canvas sprites keep labels in the same renderer lifecycle as their scene. */
 function AxisLabel({ position, children, momentum = false, color, hideNearTop = false }: { position: Vec3; children: string; momentum?: boolean; color?: string; hideNearTop?: boolean }) {
@@ -49,58 +51,62 @@ function AxisLabel({ position, children, momentum = false, color, hideNearTop = 
   return <sprite ref={sprite} position={position} scale={[0.25, 0.25, 1]} renderOrder={10}><spriteMaterial map={texture} transparent depthTest={false} depthWrite={false} /></sprite>
 }
 
-function CameraController({ settings, id }: { settings: Settings; id: string }) {
+function CameraController({ settings, id, fitScale }: { settings: Settings; id: string; fitScale: number }) {
   const controls = useRef<OrbitControlsImpl>(null)
   const busy = useRef(false)
   const camera = useThree(s => s.camera)
   const size = useThree(s => s.size)
   // Preserve a common orbit while fitting the smaller flank viewports.
-  const bondScale = settings.bondLength / defaultSettings.bondLength
-  const fit = Math.max(1, size.height / Math.max(1, size.width) * 0.95) * Math.max(1, bondScale)
-  const previousView = useRef({ fit, reset: -1 })
-  useEffect(() => {
+  const fit = Math.max(1, size.height / Math.max(1, size.width) * 0.95) * Math.max(1, fitScale)
+  const baseZoom = orthographicViewZoom(size.height, fit)
+  const saved = useRef<CameraView>({ position: [...INITIAL_CAMERA], target: [0, 0, 0] })
+  const previousReset = useRef(-1)
+  const appliedCamera = useRef<typeof camera | null>(null)
+  const applyView = useCallback((view: CameraView) => {
     busy.current = true
-    const reset = previousView.current.reset !== settings.cameraReset
-    const target = controls.current?.target ?? new THREE.Vector3()
-    if (reset) { camera.position.set(...INITIAL_CAMERA).multiplyScalar(fit); target.set(0, 0, 0) }
-    else camera.position.sub(target).multiplyScalar(fit / previousView.current.fit).add(target)
-    previousView.current = { fit, reset: settings.cameraReset }
     camera.up.set(0, 0, 1)
-    camera.far = 80 * Math.max(1, bondScale)
-    camera.updateProjectionMatrix()
+    camera.far = 80 * Math.max(1, fitScale)
+    applyCameraView(camera, view, fit, baseZoom, size)
+    controls.current?.target.fromArray(view.target)
     controls.current?.update()
+    appliedCamera.current = camera
     busy.current = false
-  }, [camera, settings.cameraReset, fit])
+  }, [camera, fit, baseZoom, fitScale, size.width, size.height])
+  useEffect(() => {
+    if (previousReset.current !== settings.cameraReset) {
+      saved.current = { position: [...INITIAL_CAMERA], target: [0, 0, 0] }
+      previousReset.current = settings.cameraReset
+    }
+    applyView(saved.current)
+  }, [applyView, settings.cameraReset])
   useEffect(() => {
     const sync = (event: Event) => {
       const detail = (event as CustomEvent<CameraDetail>).detail
       if (detail.source === id) return
-      busy.current = true
-      camera.position.fromArray(detail.position.map((value, i) => detail.target[i] + (value - detail.target[i]) * fit))
-      controls.current?.target.fromArray(detail.target)
-      controls.current?.update()
-      busy.current = false
+      saved.current = detail
+      applyView(detail)
     }
     SYNC.addEventListener('camera', sync)
     return () => SYNC.removeEventListener('camera', sync)
-  }, [camera, id, fit])
-  return <OrbitControls ref={controls} makeDefault enableDamping dampingFactor={0.12} minDistance={3.2 * fit} maxDistance={16 * fit}
+  }, [applyView, id])
+  const referenceDistance = Math.hypot(...INITIAL_CAMERA)
+  return <OrbitControls ref={controls} makeDefault enableDamping dampingFactor={0.12} minDistance={3.2 * fit} maxDistance={16 * fit} minZoom={baseZoom * referenceDistance / 16} maxZoom={baseZoom * referenceDistance / 3.2}
     onChange={() => {
-      if (!busy.current && controls.current) {
-        const target = controls.current.target.toArray()
-        const position = camera.position.toArray().map((value, i) => target[i] + (value - target[i]) / fit)
-        SYNC.dispatchEvent(new CustomEvent('camera', { detail: { source: id, position, target } }))
+      if (!busy.current && appliedCamera.current === camera && controls.current) {
+        const view = readCameraView(camera, controls.current.target, fit, baseZoom)
+        saved.current = view
+        SYNC.dispatchEvent(new CustomEvent('camera', { detail: { source: id, ...view } }))
       }
     }} />
 }
 
-function Laboratory() {
+function Laboratory({ bondScale }: { bondScale: number }) {
   return <>
     <ambientLight intensity={0.65} />
     <directionalLight position={[3, -4, 6]} intensity={2.4} color="#d4fff8" />
     <directionalLight position={[-5, 1, 3]} intensity={1.6} color="#829aff" />
     <pointLight position={[0, 4, -2]} intensity={12} color="#38bfa7" />
-    <gridHelper args={[20, 40, '#263647', '#1a2839']} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -1.75]} material-transparent material-opacity={0.33} />
+    <gridHelper name="laboratory-floor" args={[20, 40, '#263647', '#1a2839']} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -2.3 * Math.max(1, bondScale)]} material-transparent material-opacity={0.33} />
     <group name="laboratory-z-axis">
       <Line points={[[0, 0, -2.55], [0, 0, 2.65]]} color="#91bbc4" lineWidth={0.8} transparent opacity={0.45} dashed dashSize={0.055} gapSize={0.055} />
       <AxisLabel position={[0, 0, 2.85]} hideNearTop>z</AxisLabel>
@@ -131,14 +137,6 @@ function Surface({ geometry, overlay = false, timeline, evolving = false, cohere
   return <primitive object={surface.group} />
 }
 
-function Nodes({ geometry, settings, timeline }: { geometry: THREE.BufferGeometry; settings: Settings; timeline: QuantumTimeline }) {
-  const lines = useRef<THREE.LineSegments>(null)
-  useFrame(() => {
-    if (lines.current) lines.current.rotation.z = settings.timeEvolution && settings.m !== 0 && (settings.surfaceQuantity === 'real' || settings.surfaceQuantity === 'imaginary') ? timeline.frame.firstPhase / settings.m : 0
-  })
-  return <lineSegments ref={lines} geometry={geometry}><lineBasicMaterial color="#e8c77d" transparent opacity={0.35} depthWrite={false} /></lineSegments>
-}
-
 function QuantumEnsemble({ settings, onStats, timeline }: { settings: Settings; onStats: (s: SampleStatistics) => void; timeline: QuantumTimeline }) {
   const rods = useRef<THREE.InstancedMesh>(null)
   const atomsA = useRef<THREE.InstancedMesh>(null)
@@ -146,8 +144,8 @@ function QuantumEnsemble({ settings, onStats, timeline }: { settings: Settings; 
   const depthGroup = useMemo(() => new THREE.Group(), [])
   const depthPass = useRef<ReturnType<typeof createParticleDepthPass> | null>(null)
   const { firstFraction, mass1, mass2 } = getMolecularParameters(settings)
-  const palette = ROTOR_PALETTES[settings.rotorPalette]
-  const opacity = settings.particleOcclusion ? 1 : settings.rotorOpacity
+  const palette = getRotorPalette(settings)
+  const opacity = settings.rotorOpacity
   const blending = settings.particleOcclusion ? THREE.NormalBlending : THREE.AdditiveBlending
   const engine = useMemo(() => new OrientationEnsemble(settings.j, settings.m, settings.seed, settings.count, settings.superposition ? { j: settings.j2, m: settings.m2 } : undefined), [settings.j, settings.m, settings.seed, settings.superposition, settings.superposition ? settings.j2 : 0, settings.superposition ? settings.m2 : 0])
   const scratch = useMemo(() => ({ object: new THREE.Object3D(), vector: new THREE.Vector3() }), [])
@@ -222,15 +220,82 @@ function QuantumEnsemble({ settings, onStats, timeline }: { settings: Settings; 
   return <group>
     <primitive object={depthGroup} />
     <instancedMesh ref={rods} {...instanceProps}>
-      <cylinderGeometry args={[0.014, 0.014, 1, 6]} /><meshBasicMaterial color={palette.bond} toneMapped={false} transparent={!settings.particleOcclusion} opacity={settings.particleOcclusion ? 1 : opacity * 0.72} depthWrite={false} depthTest={settings.particleOcclusion} blending={blending} />
+      <cylinderGeometry args={[0.014, 0.014, 1, 6]} /><meshBasicMaterial color={palette.bond} toneMapped={false} transparent={!settings.particleOcclusion || opacity < 1} opacity={settings.particleOcclusion ? opacity : opacity * 0.72} depthWrite={false} depthTest={settings.particleOcclusion} blending={blending} />
     </instancedMesh>
     <instancedMesh ref={atomsA} {...instanceProps}>
-      <sphereGeometry args={[ENSEMBLE_ATOM_RADIUS, 8, 6]} /><meshBasicMaterial color={palette.first} toneMapped={false} transparent={!settings.particleOcclusion} opacity={opacity} depthWrite={false} depthTest={settings.particleOcclusion} blending={blending} />
+      <sphereGeometry args={[ENSEMBLE_ATOM_RADIUS, 8, 6]} /><meshBasicMaterial color={palette.first} toneMapped={false} transparent={!settings.particleOcclusion || opacity < 1} opacity={opacity} depthWrite={false} depthTest={settings.particleOcclusion} blending={blending} />
     </instancedMesh>
     <instancedMesh ref={atomsB} {...instanceProps}>
-      <sphereGeometry args={[ENSEMBLE_ATOM_RADIUS, 8, 6]} /><meshBasicMaterial color={palette.second} toneMapped={false} transparent={!settings.particleOcclusion} opacity={opacity} depthWrite={false} depthTest={settings.particleOcclusion} blending={blending} />
+      <sphereGeometry args={[ENSEMBLE_ATOM_RADIUS, 8, 6]} /><meshBasicMaterial color={palette.second} toneMapped={false} transparent={!settings.particleOcclusion || opacity < 1} opacity={opacity} depthWrite={false} depthTest={settings.particleOcclusion} blending={blending} />
     </instancedMesh>
   </group>
+}
+
+function DrivenField({ settings, timeline }: { settings: Settings; timeline: QuantumTimeline }) {
+  const electricLabel = useRef<THREE.Group>(null), dipoleLabel = useRef<THREE.Group>(null)
+  const arrows = useMemo(() => [new THREE.ArrowHelper(Y_AXIS, new THREE.Vector3(), 1, '#35d3e4'), new THREE.ArrowHelper(Y_AXIS, new THREE.Vector3(), 1, '#ffb547')], [])
+  const vector = useMemo(() => new THREE.Vector3(), [])
+  const wave = useMemo(() => {
+    const group = new THREE.Group()
+    group.name = 'electromagnetic-wave'
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(161 * 3), 3).setUsage(THREE.DynamicDrawUsage))
+    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: '#35d3e4', transparent: true, opacity: 0.75, toneMapped: false }))
+    line.name = 'electric-wave'
+    line.frustumCulled = false
+    group.add(line)
+    const propagation = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), 5.2, '#78cda0', 0.2, 0.1)
+    group.add(propagation)
+    return { group, line, propagation }
+  }, [])
+  const angularDipole = useMemo(() => transitionDipole(settings), [settings.j, settings.m, settings.j2, settings.m2, settings.polarization])
+  const allowed = validateTransition(settings).allowed, rates = transitionRates(settings), resonance = rates.resonance
+  const linear = settings.polarization === 'pi'
+  useEffect(() => () => arrows.forEach(arrow => arrow.dispose()), [arrows])
+  useEffect(() => () => {
+    wave.line.geometry.dispose(); wave.line.material.dispose()
+    wave.propagation.dispose()
+  }, [wave])
+  useFrame(() => {
+    const frame = timeline.frame
+    wave.group.visible = allowed
+    if (allowed) {
+      const wavelength = rates.photonWavelength
+      for (let i = 0; i < 161; i++) {
+        const distance = (i / 160 * 2 - 1) * 2.5
+        // One wavelength spans three display units; physical phase still follows the shared clock.
+        const field = electromagneticWave(settings, resonance, frame.time, settings.drivePhase, distance * wavelength / 3, angularDipole).electric
+        wave.line.geometry.getAttribute('position').setXYZ(i, (linear ? distance : 0) + field.x * 2.2, field.y * 2.2, (linear ? 0 : distance) + field.z * 2.2)
+      }
+      wave.line.geometry.getAttribute('position').needsUpdate = true
+      vector.set(linear ? 1 : 0, 0, linear ? 0 : 1)
+      wave.propagation.setDirection(vector); wave.propagation.position.copy(vector).multiplyScalar(-2.6)
+    }
+    const field = allowed ? electricField(settings, resonance, frame.time, settings.drivePhase, angularDipole) : { x: 0, y: 0, z: 0 }
+    const dipole = dipoleExpectation(settings, frame.coefficients ?? initialCoefficients, angularDipole)
+    const updateArrow = (index: number, value: typeof field, scale: number, label: THREE.Group | null) => {
+      vector.set(value.x, value.y, value.z).multiplyScalar(scale)
+      const length = vector.length() * 2.2, visible = length > 1e-8
+      arrows[index].visible = visible
+      if (label) label.visible = visible
+      if (!visible) return
+      vector.normalize(); arrows[index].setDirection(vector)
+      arrows[index].setLength(length, Math.min(0.24, length * 0.3), Math.min(0.13, length * 0.16))
+      label?.position.copy(vector).multiplyScalar(length + 0.22)
+    }
+    updateArrow(0, field, 1, electricLabel.current)
+    updateArrow(1, dipole, settings.dipoleMoment > 0 ? 1 / settings.dipoleMoment : 0, dipoleLabel.current)
+  })
+  return <>
+    <Line points={[[-2.55, 0, 0], [2.65, 0, 0]]} color="#91bbc4" lineWidth={0.8} transparent opacity={0.45} />
+    <Line points={[[0, -2.55, 0], [0, 2.65, 0]]} color="#91bbc4" lineWidth={0.8} transparent opacity={0.45} />
+    <AxisLabel position={[2.85, 0, 0]}>x</AxisLabel><AxisLabel position={[0, 2.85, 0]}>y</AxisLabel>
+    {arrows.map((arrow, index) => <primitive key={index} object={arrow} />)}
+    <primitive object={wave.group} />
+    {allowed && <AxisLabel position={linear ? [3.05, 0, 0.25] : [0.25, 0, 3.05]} color="#78cda0">k</AxisLabel>}
+    <group ref={electricLabel}><AxisLabel position={[0, 0, 0]} color="#35d3e4">E</AxisLabel></group>
+    <group ref={dipoleLabel}><AxisLabel position={[0, 0, 0]} momentum color="#ffb547">μ</AxisLabel></group>
+  </>
 }
 
 function ClassicalRotor({ settings, second = false }: { settings: Settings; second?: boolean }) {
@@ -282,16 +347,23 @@ function FrameRate({ onFPS }: { onFPS: (fps: number) => void }) {
 export function Scene({ mode, settings, prepared, onStats, id, onFPS, timeline }: { prepared: PreparedQuantumState | null; mode: SceneKind; settings: Settings; onStats: (s: SampleStatistics) => void; id: string; onFPS?: (fps: number) => void; timeline: QuantumTimeline }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
+  const orthographic = mode === 'field'
+  const camera = useMemo(() => {
+    const next = orthographic ? new THREE.OrthographicCamera() : new THREE.PerspectiveCamera(CAMERA_FOV)
+    next.position.fromArray(INITIAL_CAMERA); next.up.set(0, 0, 1); next.near = 0.1; next.far = 80
+    return next
+  }, [orthographic])
   const evolving = settings.coherentTransition || (settings.timeEvolution && (settings.j > 0 || (settings.superposition && settings.j2 > 0)) && (surfaceColorMode(settings.surfaceQuantity) !== 'density' || (settings.superposition && settings.j !== settings.j2)))
-  const bondScale = settings.bondLength / defaultSettings.bondLength
+  const bondScale = mode === 'field' ? 1 : settings.bondLength / defaultSettings.bondLength
   const zeroComponent = !evolving && mode === 'wavefunction' && (settings.surfaceQuantity === 'real' || settings.surfaceQuantity === 'imaginary') && prepared?.surface.boundingSphere?.radius === 0
   return <div className="canvas-container" data-testid={`scene-${mode}`} data-bond-length={settings.bondLength} data-display-scale={bondScale} data-rotor-count={mode === 'ensemble' ? settings.count : mode === 'classical' ? settings.superposition ? 2 : 1 : undefined} data-first-mass-fraction={mode !== 'wavefunction' ? getMolecularParameters(settings).firstFraction : undefined} data-particle-occlusion={mode === 'ensemble' ? settings.particleOcclusion : undefined} data-rotor-palette={mode === 'ensemble' ? settings.rotorPalette : undefined}>
-    <SceneBoundary>{mounted && <Canvas frameloop={mode === 'wavefunction' && !evolving ? 'demand' : 'always'} dpr={[1, 1.5]} camera={{ position: INITIAL_CAMERA, fov: 40, near: 0.1, far: 80, up: [0, 0, 1] }} gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}>
-      <Laboratory />
-      <CameraController settings={settings} id={id} />
-      {mode === 'wavefunction' && prepared && <group scale={bondScale}><Surface geometry={prepared.surface} timeline={timeline} evolving={evolving} coherent={settings.coherentTransition} />{prepared.nodes && <Nodes geometry={prepared.nodes} settings={settings} timeline={timeline} />}</group>}
+    <SceneBoundary>{mounted && <Canvas orthographic={orthographic} frameloop={mode === 'wavefunction' && !evolving ? 'demand' : 'always'} dpr={[1, 1.5]} camera={camera} gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}>
+      <Laboratory bondScale={bondScale} />
+      <CameraController settings={settings} id={id} fitScale={mode === 'field' ? 1.2 : bondScale} />
+      {mode === 'wavefunction' && prepared && <group scale={bondScale}><Surface geometry={prepared.surface} timeline={timeline} evolving={evolving} coherent={settings.coherentTransition} /></group>}
       {mode === 'ensemble' && prepared && <>{prepared.overlay && <group scale={bondScale}><Surface geometry={prepared.overlay} overlay timeline={timeline} evolving={settings.coherentTransition} coherent={settings.coherentTransition} /></group>}<QuantumEnsemble settings={settings} onStats={onStats} timeline={timeline} /></>}
       {mode === 'classical' && <><ClassicalRotor settings={settings} />{settings.superposition && <ClassicalRotor settings={settings} second />}</>}
+      {mode === 'field' && <DrivenField settings={settings} timeline={timeline} />}
       {onFPS && <FrameRate onFPS={onFPS} />}
     </Canvas>}</SceneBoundary>
     {zeroComponent && <div className="zero-component">{settings.superposition ? `${settings.surfaceQuantity === 'real' ? 'Re' : 'Im'}(ψ) = 0` : <>Im(Y) = 0 for m<sub>J</sub> = 0</>}<span>{settings.superposition ? 'This component vanishes for the selected coherent sum.' : 'This eigenfunction is purely real.'}</span></div>}

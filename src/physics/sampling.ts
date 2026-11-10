@@ -1,9 +1,10 @@
 import { getPolarAmplitude, LOW_J_LIMIT, validateState } from './quantum'
 import { densityMoments, equalCoefficients, signedPolarAmplitude, type DensityMoments, type WaveCoefficients } from './superposition'
 import { HISTOGRAM_BINS, HISTOGRAM_BIN_OPTIONS, MAX_HISTOGRAM_BINS, rebinCounts } from './histograms'
+import { defaultSettings } from '../types'
 
 export const MAX_ROTORS = 10000
-export const DEFAULT_ROTORS = 2500
+export const DEFAULT_ROTORS = defaultSettings.count
 export { HISTOGRAM_BINS } from './histograms'
 const CDF_RESOLUTION = 8192
 const cache = new Map<string, Float64Array>()

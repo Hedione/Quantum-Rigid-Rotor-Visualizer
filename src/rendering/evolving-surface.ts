@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import type { SurfaceQuantity } from '../types'
 import type { WaveCoefficients } from '../physics/superposition'
+import { WAVE_COLORS } from './wave-colors'
 
 export interface WaveEvolutionData { m: number; m2: number; normalization: number; maxima: [number, number, number]; quantity: SurfaceQuantity; envelope?: { first: number[]; second: number[] } }
 
@@ -42,9 +43,11 @@ uniform float waveEnabled;
 uniform vec4 wavePhases;
 uniform vec4 waveModes;
 uniform vec3 waveMaxima;
-uniform float wavePhaseColor;
-uniform vec3 waveCyan;
-uniform vec3 waveViolet;
+uniform vec3 waveRealPositive;
+uniform vec3 waveRealNegative;
+uniform vec3 waveImaginaryPositive;
+uniform vec3 waveImaginaryNegative;
+uniform vec3 waveDensityColor;
 struct WaveVertex { vec3 position; vec3 normal; vec3 color; };
 vec4 rotateWave(vec4 v) {
   return vec4(v.x * wavePhases.x + v.y * wavePhases.y, v.y * wavePhases.x - v.x * wavePhases.y,
@@ -75,12 +78,13 @@ WaveVertex evolveWave() {
   vec3 et = vec3(ct * azimuth, -st);
   vec3 ep = vec3(-azimuth.y, azimuth.x, 0.0);
   vec3 normal = value * st * n - dr.x * st * et - dr.y * ep;
-  vec2 phase = wavePhaseColor > 0.5 && magnitude > 0.000001 ? vec2(re, im) / magnitude : vec2(kind > 2.5 && (kind < 3.5 ? re : im) < 0.0 ? -1.0 : 1.0, 0.0);
-  if (kind > 0.5 && kind < 2.5) phase = vec2(1.0, 0.0);
+  vec3 realColor = re < 0.0 ? waveRealNegative : waveRealPositive;
+  vec3 imaginaryColor = im < 0.0 ? waveImaginaryNegative : waveImaginaryPositive;
+  float weight = abs(re) + abs(im);
   WaveVertex result;
   result.position = n * value * scale;
   result.normal = length(normal) > 0.0000001 ? normalize(normal) : n;
-  result.color = clamp(mix(waveCyan, waveViolet, (1.0 - phase.x) * 0.5) + (wavePhaseColor > 0.5 ? phase.y * vec3(0.06, -0.02, 0.08) : vec3(0.0)), 0.0, 1.0);
+  result.color = kind > 0.5 && kind < 2.5 ? waveDensityColor : kind > 2.5 ? (kind < 3.5 ? realColor : imaginaryColor) : mix(realColor, imaginaryColor, weight > 0.0 ? abs(im) / weight : 0.0);
   return result;
 }
 `
@@ -89,10 +93,12 @@ export function createSurfaceEvolution(materials: THREE.Material[]) {
   let data: WaveEvolutionData
   const uniforms = {
     waveEnabled: { value: 0 }, wavePhases: { value: new THREE.Vector4(1, 0, 1, 0) }, waveModes: { value: new THREE.Vector4() }, waveMaxima: { value: new THREE.Vector3() },
-    wavePhaseColor: { value: 1 }, waveCyan: { value: new THREE.Color('#54dfca') }, waveViolet: { value: new THREE.Color('#a58bf4') },
+    waveRealPositive: { value: new THREE.Color(WAVE_COLORS.realPositive) }, waveRealNegative: { value: new THREE.Color(WAVE_COLORS.realNegative) },
+    waveImaginaryPositive: { value: new THREE.Color(WAVE_COLORS.imaginaryPositive) }, waveImaginaryNegative: { value: new THREE.Color(WAVE_COLORS.imaginaryNegative) },
+    waveDensityColor: { value: new THREE.Color(WAVE_COLORS.density) },
   }
   for (const material of materials) {
-    material.customProgramCacheKey = () => 'rigid-rotor-evolution-v2'
+    material.customProgramCacheKey = () => 'rigid-rotor-evolution-v3'
     material.onBeforeCompile = shader => {
       Object.assign(shader.uniforms, uniforms)
       shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>\n${vertexEvolution}`)
@@ -107,7 +113,6 @@ export function createSurfaceEvolution(materials: THREE.Material[]) {
       data = geometry.userData.waveEvolution as WaveEvolutionData
       uniforms.waveModes.value.set(data.m, data.m2, data.normalization, ['magnitude', 'probability', 'jointProbability', 'real', 'imaginary'].indexOf(data.quantity))
       uniforms.waveMaxima.value.fromArray(data.maxima)
-      uniforms.wavePhaseColor.value = Number(data.quantity === 'magnitude')
     },
     setPhases(first: number, second: number, enabled: boolean) { uniforms.waveEnabled.value = Number(enabled); uniforms.wavePhases.value.set(Math.cos(first), Math.sin(first), Math.cos(second), Math.sin(second)) },
     setCoefficients(c: WaveCoefficients, enabled: boolean) {

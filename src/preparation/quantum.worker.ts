@@ -1,5 +1,4 @@
 import { createWavefunctionGeometry } from '../rendering/wavefunction'
-import { createNodeGeometry } from '../rendering/nodes'
 import { copyOrientationCDF } from '../physics/sampling'
 import { prepareSuperpositionDistribution } from '../physics/superposition'
 import { packGeometry } from './geometry'
@@ -17,9 +16,8 @@ self.onmessage = (event: MessageEvent<PreparationRequest>) => {
     const surface = createWavefunctionGeometry(state)
     result.surface = packGeometry(surface); surface.dispose()
     if (state.overlay) { const overlay = createWavefunctionGeometry(state, true); result.overlay = packGeometry(overlay); overlay.dispose() }
-    if (state.nodes && !state.superposition) { const nodes = createNodeGeometry(state); result.nodes = packGeometry(nodes); nodes.dispose() }
     const transfer: Transferable[] = []
-    for (const geometry of [result.surface, result.overlay, result.nodes] as (PackedGeometry | undefined)[]) {
+    for (const geometry of [result.surface, result.overlay] as (PackedGeometry | undefined)[]) {
       if (geometry) for (const array of [geometry.position, geometry.normal, geometry.color, geometry.index]) if (array) transfer.push(array.buffer as ArrayBuffer)
       if (geometry?.wave) transfer.push(geometry.wave.polar.buffer as ArrayBuffer, geometry.wave.derivative.buffer as ArrayBuffer, geometry.wave.direction.buffer as ArrayBuffer)
     }

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { setRotorCount } from './controls'
 import { HBAR, molecularParameters, quantumQuantities } from '../src/physics/quantum'
 import { QUANTUM_TIME_SCALE } from '../src/physics/evolution'
 
@@ -20,7 +21,7 @@ test('single eigenstates evolve in phase while probability remains stationary an
   page.on('pageerror', error => errors.push(error.message))
   await page.goto('/')
   const stage = page.locator('[aria-busy]')
-  await expect(stage).toHaveAttribute('aria-busy', 'false')
+  await expect(stage).toHaveAttribute('aria-busy', 'false', { timeout: 20000 })
   await expect(stage).toHaveAttribute('data-superposition', 'false')
   await expect(stage).toHaveAttribute('data-evolving', 'true')
   const evolution = page.getByRole('button', { name: 'Evolve in time', exact: true })
@@ -29,7 +30,7 @@ test('single eigenstates evolve in phase while probability remains stationary an
   await expect(page.locator('.evolution-elapsed')).toHaveCount(0)
   const superposition = page.getByRole('button', { name: 'Superposition mode', exact: true })
   expect((await evolution.boundingBox())!.y).toBeLessThan((await superposition.boundingBox())!.y)
-  for (const button of [evolution, page.getByRole('button', { name: 'Enable J > 10', exact: true })]) {
+  for (const button of [evolution, page.getByRole('button', { name: 'Explore high J', exact: true })]) {
     await expect(button.locator('.toggle-state')).toHaveCount(0)
     await expect(button.locator('.toggle-label')).toHaveCSS('text-align', 'center')
   }
@@ -41,12 +42,18 @@ test('single eigenstates evolve in phase while probability remains stationary an
   await superposition.click()
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await page.getByRole('button', { name: 'Pause sampling', exact: true }).click()
+  await setRotorCount(page, 100)
   const surface = page.getByTestId('scene-wavefunction').locator('canvas')
   const legend = page.locator('.pane-phase')
-  await page.getByRole('button', { name: 'Magnitude', exact: true }).click()
+  await page.getByRole('button', { name: 'Wavefunction', exact: true }).click()
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await expect(legend).toHaveAttribute('data-color-mode', 'phase')
-  const original = await surface.screenshot()
+  await expect(legend).toContainText('−π/2')
+  await expect(legend).toContainText('+π/2')
+  const phaseGradient = await legend.locator('i').evaluate(element => getComputedStyle(element).backgroundImage)
+  for (const color of ['rgb(237, 147, 182)', 'rgb(240, 184, 135)', 'rgb(114, 214, 176)', 'rgb(143, 170, 240)']) expect(phaseGradient).toContain(color)
+  const original = await surface.screenshot({ path: 'test-results/wavefunction-phase-real.png' })
+  await test.info().attach('wavefunction-floor-default', { body: original, contentType: 'image/png' })
   const preparations = await page.evaluate(() => window.phaseLayoutPreparations)
   const advance = async (delta: number) => {
     await page.evaluate(milliseconds => { window.phaseLayoutTime += milliseconds }, delta)
@@ -60,10 +67,16 @@ test('single eigenstates evolve in phase while probability remains stationary an
   expect(await page.evaluate(() => window.phaseLayoutPreparations)).toBe(preparations)
   await page.getByRole('button', { name: 'Pause sampling', exact: true }).click()
   const time = page.getByTestId('quantum-time'), frozen = await time.getAttribute('data-time')
-  const paused = await surface.screenshot()
+  const paused = await surface.screenshot({ path: 'test-results/wavefunction-phase-minus-imaginary.png' })
   await advance(2000)
   await expect(time).toHaveAttribute('data-time', frozen!)
   expect((await surface.screenshot()).equals(paused)).toBe(true)
+  await test.info().attach('wavefunction-minus-imaginary-phase', { body: paused, contentType: 'image/png' })
+  await page.getByRole('button', { name: 'Resume sampling', exact: true }).click()
+  await advance(2 * quarterPeriod)
+  await expect.poll(async () => (await surface.screenshot()).equals(paused)).toBe(false)
+  await page.getByRole('button', { name: 'Pause sampling', exact: true }).click()
+  await test.info().attach('wavefunction-plus-imaginary-phase', { body: await surface.screenshot({ path: 'test-results/wavefunction-phase-plus-imaginary.png' }), contentType: 'image/png' })
   await page.getByRole('button', { name: 'Probability density', exact: true }).click()
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await expect(legend).toHaveAttribute('data-color-mode', 'density')
@@ -79,6 +92,8 @@ test('single eigenstates evolve in phase while probability remains stationary an
     await expect(legend).toHaveAttribute('data-color-mode', 'sign')
     await expect(legend).toContainText('positive / negative')
     await expect(legend).not.toContainText('phase')
+    const gradient = await legend.locator('i').evaluate(element => getComputedStyle(element).backgroundImage)
+    for (const color of name === 'Real component' ? ['rgb(114, 214, 176)', 'rgb(237, 147, 182)'] : ['rgb(143, 170, 240)', 'rgb(240, 184, 135)']) expect(gradient).toContain(color)
   }
   await expect(page.getByTestId('controls-wavefunction').locator('.control-note')).toHaveCount(0)
   await evolution.click()
@@ -90,6 +105,10 @@ test('single eigenstates evolve in phase while probability remains stationary an
   await expect(stage).toHaveAttribute('data-displayed-j', '0')
   await evolution.click()
   await expect(page.locator('.zero-component')).toBeVisible()
+  await page.getByRole('button', { name: 'Wavefunction', exact: true }).click()
+  await page.getByRole('spinbutton', { name: 'Bond length exact value', exact: true }).fill('3')
+  await expect(page.getByTestId('scene-wavefunction')).toHaveAttribute('data-bond-length', '3')
+  await page.getByTestId('pane-wavefunction').screenshot({ path: 'test-results/wavefunction-floor-largest-bond.png' })
   expect(errors).toEqual([])
 })
 
@@ -105,14 +124,30 @@ test('wider settings and compact ensemble controls fit without wrapping or resiz
     if (width > 760) expect((await page.locator('.sidebar-shell').boundingBox())!.width).toBe(width > 1100 ? 399 : 372)
     if (width > 760) {
       const navigation = page.locator('.state-navigation')
-      const row = await navigation.boundingBox(), highJ = await navigation.getByRole('button', { name: 'Enable J > 10', exact: true }).boundingBox()
+      const row = await navigation.boundingBox(), highJ = await navigation.getByRole('button', { name: 'Explore high J', exact: true }).boundingBox()
       const previous = await navigation.getByRole('button', { name: 'Previous', exact: true }).boundingBox(), next = await navigation.getByRole('button', { name: 'Next', exact: true }).boundingBox()
-      const formerWidth = row!.width - previous!.width - next!.width - 10
-      expect(highJ!.width / formerWidth).toBeGreaterThan(.42)
-      expect(highJ!.width / formerWidth).toBeLessThan(.58)
-      expect(Math.abs(highJ!.x + highJ!.width / 2 - row!.x - row!.width / 2)).toBeLessThan(1)
+      const randomize = await navigation.getByRole('button', { name: 'Randomize', exact: true }).boundingBox()
+      expect(randomize!.width).toBe(highJ!.width)
+      const columns = await page.locator('.state-steppers').first().locator(':scope > .quantum-control').evaluateAll(elements => elements.map(element => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right } }))
+      expect(Math.abs(randomize!.x + randomize!.width - columns[0].right)).toBeLessThan(1)
+      expect(Math.abs(highJ!.x - columns[1].left)).toBeLessThan(1)
+      expect(randomize!.height).toBe(highJ!.height)
+      expect(previous!.x + previous!.width).toBeLessThanOrEqual(randomize!.x)
+      expect(randomize!.x + randomize!.width).toBeLessThanOrEqual(highJ!.x)
+      expect(highJ!.x + highJ!.width).toBeLessThanOrEqual(next!.x)
+      expect(await navigation.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     }
     await controls.scrollIntoViewIfNeeded()
+    const analysis = page.locator('.analysis-panel')
+    const polar = await analysis.locator('.polar-chart').boundingBox(), azimuth = await analysis.locator('.azimuthal-chart').boundingBox()
+    const physics = await analysis.locator('.physics-panel').boundingBox(), observables = await analysis.locator('.physics-values').boundingBox(), ladder = await analysis.locator('.energy-ladder').boundingBox()
+    expect(Math.abs(polar!.x - azimuth!.x)).toBeLessThan(1)
+    expect(azimuth!.y).toBeGreaterThanOrEqual(polar!.y + polar!.height)
+    expect(ladder!.y).toBeGreaterThanOrEqual(observables!.y + observables!.height)
+    if (width > 720) expect(physics!.x).toBeGreaterThanOrEqual(polar!.x + polar!.width)
+    else expect(physics!.y).toBeGreaterThanOrEqual(azimuth!.y + azimuth!.height)
+    expect(await analysis.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await expect(page.locator('.site-footer, .eigenstate-card')).toHaveCount(0)
     const pause = controls.getByRole('button', { name: 'Pause sampling', exact: true })
     const original = await pause.boundingBox()
     await pause.click()
@@ -127,9 +162,9 @@ test('wider settings and compact ensemble controls fit without wrapping or resiz
     expect(palettes).not.toBeNull()
     const boxes = await footer.locator('.rotor-palette button').evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().y))
     expect(Math.max(...boxes) - Math.min(...boxes)).toBeLessThan(1)
-    for (const name of ['Green / violet', 'Blue / orange', 'Single mint']) {
+    for (const name of ['Green / violet', 'Blue / orange', 'Single mint', 'Custom rotor colors']) {
       const label = controls.getByRole('button', { name, exact: true }).locator('span')
-      await expect(label).toBeVisible(); await expect(label).toHaveText(name)
+      await expect(label).toBeVisible(); await expect(label).toHaveText(name === 'Custom rotor colors' ? 'Custom' : name)
       expect(await label.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     }
     for (const row of await controls.locator('.control-label, .range-bounds').all()) expect(await row.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)

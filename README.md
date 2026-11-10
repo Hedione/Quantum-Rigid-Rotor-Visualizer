@@ -10,13 +10,13 @@ The visualizer runs in the browser and includes controls for individual eigensta
 
 - **Classical motion:** A rotating diatomic molecule with the energy and angular momentum components of the selected quantum state. Superposition mode displays one classical comparison for each component state.
 - **Quantum probability ensemble:** Up to 10,000 independently sampled molecular orientations, drawn from the quantum probability distribution. The central view makes the distribution visible as a cloud of rigid rotors.
-- **Wavefunction & probability:** A radial surface showing magnitude, probability density, joint angular probability, real component, or imaginary component, with a quantity-specific color legend and optional eigenstate nodal structures.
+- **Wavefunction & probability:** A radial surface showing magnitude, probability density, joint angular probability, real component, or imaginary component, with a quantity-specific color legend.
 
 Drag to orbit and scroll or pinch to zoom. Cameras stay synchronized and the z axis stays visible. Each view has its own controls directly underneath it, and the layout adapts to smaller screens.
 
 ## Explore quantum states
 
-Select integer quantum numbers **J** and **m<sub>J</sub>**, with **−J ≤ m<sub>J</sub> ≤ J**, using number fields or sliders. The standard range is J = 0–10. **Enable J > 10**, between Previous and Next, extends the range to 50 and starts at J = 50, m<sub>J</sub> = 50. Turning it off restores the primary and secondary quantum-number selections from before high-J mode was enabled.
+Select integer quantum numbers **J** and **m<sub>J</sub>**, with **−J ≤ m<sub>J</sub> ≤ J**, using number fields or sliders. The standard range is J = 0–10. **Explore high J** extends the range to 50 while keeping both selected states unchanged. Turning it off restores the primary and secondary quantum-number selections from before high-J exploration was enabled.
 
 J and m<sub>J</sub> remain independently editable. Stretched states with m<sub>J</sub> = J concentrate the ensemble near the classical rotation plane as J increases. Different m<sub>J</sub> values produce different distributions, so increasing J alone does not imply concentration along a particular axis.
 
@@ -38,7 +38,7 @@ Try these examples:
 | (2, +2) | (2, −2) | A four-lobe pattern around the z axis |
 | (1, 0) | (2, +1) | Interference between different energies; evolves in time by default |
 
-The two-lobe and four-lobe examples have dedicated buttons. **Randomize both states** chooses another pair within the active quantum-number range.
+Select these examples through the quantum-number fields. Second-state controls stay visible and gray when Superposition mode is off; re-enabling it restores editing. The yellow **Randomize** button, between **Previous** and **Explore high J**, chooses a valid state within the active range. With Superposition mode on it randomizes both states; with it off it randomizes the primary state and retains the disabled secondary selection.
 
 Enable **Evolve in time** to apply each state's energy-dependent phase:
 
@@ -58,23 +58,41 @@ ci(t) = cos(Ωt/2), cf(t) = −i exp(iφd) sin(Ωt/2)
 Tπ = π/Ω
 ```
 
-Change initial/final states, select π / σ+ / σ−, adjust effective Ω in rad/ps and drive phase, or scrub a complete pulse. Play, pause/resume, reset, and replay share one analytic clock. The final eigenstate holds at pulse completion. Ω defaults to π rad/ps, giving a 1 ps pulse; transition playback defaults to 10× the nominal 20 fs per display second. Playback slows further when necessary to keep laboratory phases below 8 rad per display second. The displayed physical-time rate reports this limit; no dynamical phase is discarded.
+Choose the initial state, then use the two **ΔJ = +1 / −1** buttons and three **ΔmJ = +1 / 0 / −1** buttons. Each row uses the shared cyan selected-button style. The final state is right-aligned on the same row as the π / σ+ / σ− transition indicator below; unavailable choices are disabled. Initial-state edits and navigation carry the selected changes to the new state, adjusting them only when a boundary requires another allowed neighbor. Randomize chooses a new initial state and random valid changes in both J and mJ, then derives the final state. Drive phase is fixed at zero.
 
-The quantization axis is z. π uses E along z and propagation along +x. Circular fields propagate along +z. Operational σ± labels mean Δm = ±1; for absorption σ+ rotates +x toward +y viewed from +z toward the origin, and σ− reverses. The same operational Δm reverses field rotation for stimulated emission. The field preview includes the carrier phase. Drive phase φd is the phase of the effective interaction-picture coupling Hfi = ℏΩ exp(iφd)/2, including the signed dipole and the sign in −μ·E.
+On the first switch to Transition mode in each page visit, a concise notice blurs and disables its controls until **I understand** is selected. It explains the simplified model, exaggerated Rabi rates, and illustration-only purpose. Acknowledgement survives mode changes and simulation reset; reloading the page shows the notice again.
+
+Adjust **Rabi Ω : light ω multiple** with the slider over **0.001×–1×**, starting at **0.1×**. Its physical cyclic frequency fR in Hz appears between the title and multiplier readout. The ratio is fR/fE = Ω/|ω|; internally Ω remains in rad/ps for the analytic model. The Rabi control is slider-only. The multiplier returns to **0.1×** whenever the initial state, selection rules, or molecular parameters change. Manual slider selections persist through pulse transport; double-clicking restores 0.1×. The transport row sits below the transition choices and above the Rabi slider, with **Loop mode** between Play/Resume and Reset. With Loop mode OFF, the final eigenstate holds at pulse completion.
+
+**Playback speed** spans **0.1×–10×**, with **1× = 1,000 fs per display second**. Play, pause/resume, reset, and replay share one analytic clock. The selected multiplier sets its physical rate directly, from 100–10,000 fs/s, independently of the molecule or Rabi frequency.
+
+**Loop mode** starts OFF and glows orange when enabled. It drives continuous Rabi oscillations from the initial state to the final state and back, repeating with period **2π/Ω** while laboratory time, carrier phase, and complex amplitudes continue forward. Its **Rabi cycle phase** slider covers 0–360°: 0°/360° is the initial state and 180° is the final state. Scrubbing pauses playback. Changing loop mode resets the transition to its initial state and pauses it; Reset transition retains the loop setting, while RESET SIMULATION turns it OFF.
+
+The mean dipole's signed envelope is proportional to **sin(Ωt)**. It vanishes at 180° and changes sign on the return half, producing a 180° phase flip. Its direction is undefined at zero; this can look like a sudden reverse. Away from zero, circular dipole and field rotate in the same sense. This follows the resonant coherence solution in [MIT's light–matter interaction notes, Eq. 6.57](https://ocw.mit.edu/courses/6-974-fundamentals-of-photonics-quantum-electronics-spring-2006/d5288733649df15f5903633f51ad2dbd_inter_lig_matter.pdf#page=7), where this project's Ω corresponds to 2Ωr.
+
+The transport uses Play/Pause icons, with tooltips and accessible names for play, pause, resume, and replay. Transition playback has no laboratory-phase cap: the selected multiplier controls the shared analytic clock directly.
+
+The quantization axis is z. π uses E along z and propagation along +x. Circular fields propagate along +z. Operational σ± labels mean Δm = ±1; for absorption σ+ rotates +x toward +y viewed from +z toward the origin, and σ− reverses. The same operational Δm reverses field rotation for stimulated emission. In Transition mode the classical view becomes a 3D display of the instantaneous electric field and laboratory dipole expectation ⟨μ⟩, including carrier phase. Arrow lengths show E/E₀ and ⟨μ⟩/μ₀; readouts give V/m and Debye. A pure rotational eigenstate has zero laboratory dipole expectation even when its permanent body-frame dipole μ₀ is nonzero. Drive phase φd is the phase of the effective interaction-picture coupling Hfi = ℏΩ exp(iφd)/2, including the signed dipole and the sign in −μ·E.
 
 Transition validation integrates the existing signed harmonics against C¹q = √(4π/3) Y¹q, including angular coupling factors, and enforces ΔJ = ±1. A zero matrix element or incompatible polarization disables transfer and scrubbing with an explanation. These angular integrals correspond to [NIST's Gaunt integral](https://dlmf.nist.gov/34.3.E22); the [electric-dipole selection rules](https://farside.ph.utexas.edu/teaching/qm/lectures/node79.html) fix the allowed angular changes.
 
-This is the isolated, exact-resonance rotating-wave model with a permanent dipole, no relaxation, and no decoherence. The dipole is assumed independently of the mass presets; a mass preset does not assert that a real molecule is polar. Ω already includes the coupling strength. Real degenerate rotors may couple additional m states; their multilevel dynamics are outside this two-level model. Instantaneous and cumulative diagnostic curves include both changing populations and complex interference.
+Set the permanent **Dipole moment** under Particles & bond, from **0–10 D** in Static mode and **0.00001–10 D** in Transition mode (1 D = 3.33564 × 10⁻³⁰ C m). Entering Transition with H₂ automatically applies the complete CO preset, and H₂ is disabled in this mode. The original Static molecule's masses, bond length, mass matching, and dipole are restored on return, including custom settings. A custom zero-dipole model keeps its geometry and uses the positive minimum during Transition. HF uses **1.827 D** and CO **0.112 D**, from [NIST's experimental dipole table](https://cccbdb.nist.gov/diplistx.asp). HD uses the weak isotope-induced value **approximately 0.00083 D**, as reported by [Maio et al., footnote 1](https://wwwmpa.mpa-garching.mpg.de/mpa/publications/preprints/pp2007/MPA2187.pdf). Presets apply masses, bond length, and dipole together; each remains editable.
+
+This is the isolated, exact-resonance rotating-wave model with no relaxation or decoherence. Ω is the effective coupling strength. For angular matrix element d = ⟨f|C¹q|i⟩, E₀ = ℏΩ/(μ₀|d|) for linear polarization and ℏΩ/(√2 μ₀|d|) for the constant-magnitude circular field. The electric-field magnitude is illustrative and does not represent a realistic experimental field. Typical laboratory fields and resulting Rabi rates are much smaller, making transitions hard to follow at this visualization's time scale. For context, [rotational-state control experiments](https://www.nature.com/articles/s41467-025-62275-y) report microwave Rabi rates around 10 kHz; actual rates depend on the molecule and drive strength. Real degenerate rotors may couple additional m states; their multilevel dynamics are outside this two-level model. Instantaneous and cumulative diagnostic curves include both changing populations and complex interference. High J exploration is available only in Static mode; Transition mode limits both J editors to 10.
+
+The **Photon frequency** readout in Field & dipole shows the resonant frequency **f = |Ef − Ei| / h**, with **Photon wavelength λ = c/f** beside it. Readouts choose SI prefixes automatically, using up to three significant digits: for example, **230 GHz**, **3.77 THz**, **79.5 µm**, or **1.3 mm**. Electric-field and dipole readouts use the same formatting. Frequency and wavelength depend on the energy gap, independently of the Rabi frequency and playback multiplier.
+
+The 3D field view shows the electric component of the propagating carrier wave, with cyan E/E₀ and a green propagation arrow. It shares the pulse clock and its pause, scrub, endpoint hold, and continuous looping. Propagation is along +x for π and +z for σ±, following [OpenStax's plane-wave conventions](https://openstax.org/books/university-physics-volume-2/pages/16-2-plane-electromagnetic-waves). Wavelength spacing is schematic so the wave fits the pane; its phase, polarization, and frequency follow the physical drive. The local E arrow matches the wave at the molecular origin. Orthographic projection keeps the circular wave's radius constant when viewed along its propagation axis. Orbit, pan, and zoom remain synchronized with the other views.
 
 ## Probability surfaces and orientation distributions
 
-The default radial surface is the **joint angular probability distribution**:
+The default **Wavefunction** option uses **|ψ| for radius** and the **complex phase of ψ for color**. The **joint angular probability distribution** remains available as:
 
 ```text
 p(θ, φ) = |ψ(θ, φ)|² sin θ
 ```
 
-This is probability density per dθ dφ. Both angles remain visible, preserving interference without integrating over azimuth. Other surface choices display |ψ|, |ψ|², Re(ψ), or Im(ψ). Surface radii are normalized for readability; they are not molecular bond lengths or trajectories. Real and imaginary components depend on the phase convention.
+This is probability density per dθ dφ. Both angles remain visible, preserving interference without integrating over azimuth. Other surface choices display |ψ|², Re(ψ), or Im(ψ). Surface radii are normalized for readability; they are not molecular bond lengths or trajectories. Real and imaginary components depend on the phase convention.
 
 Normalization applies to the underlying quantum functions, before the visual radius scaling:
 
@@ -87,7 +105,7 @@ Both equalities hold for eigenstates, coherent superpositions, and every time du
 
 The normalization audit in [src/physics/normalization.test.ts](src/physics/normalization.test.ts) integrates all 40,401 eigenstates supported by the mathematical utilities (J = 0–200; the UI supports up to 50), checks the basis Gram matrix, sweeps a complete pulse at 1,001 times for four drive phases, and checks free evolution, arbitrary complex weights, marginals, sampling, and all histogram resolutions. [e2e/normalization.spec.ts](e2e/normalization.spec.ts) independently integrates densities recovered from the GPU surface, undoing only visual scaling. Local audit reports are generated under ignored test-results.
 
-Magnitude always uses complex phase coloring. Real and imaginary components use positive/negative sign colors. Probability and joint density use a single color because densities have no complex phase. The legend follows the selected quantity.
+The Wavefunction view uses |ψ| for radius and a soft cyclic palette for the complex phase of ψ: seafoam at 0 (+real), periwinkle at +π/2 (+imaginary), rose at ±π (−real), and apricot at −π/2 (−imaginary). Its color bar aligns these five phase labels with their corresponding palette stops. Real components use seafoam/rose sign colors; imaginary components use periwinkle/apricot. Static geometry, animated GPU surfaces, and phase/sign legends share these anchors. Probability and joint density use uniform seafoam because densities have no complex phase. The floor grid stays below the wavefunction and moves down with larger bond lengths.
 
 Two histograms compare sampled orientations with theory:
 
@@ -103,8 +121,8 @@ Switch between the **current batch** and **cumulative** statistics, or reset the
 | Control | Default | Available range |
 | --- | --- | --- |
 | Initial state | J = 1, m<sub>J</sub> = 0 | J = 0–10; up to 50 in high-J mode |
-| Ensemble size | 2,500 rotors | 1–10,000, logarithmic slider |
-| Rotor opacity | 1% | 0.5–75%, logarithmic slider; fixed at 100% with occlusion |
+| Ensemble size | 5,000 rotors | 1–10,000, logarithmic slider |
+| Rotor opacity | 1% | 0.5–75% with occlusion off; 0.5–100% with it on; logarithmic slider |
 | Atom radius (visualization only) | 5 pm | 0.5–10 pm; visualization size rather than an exact measured atomic radius |
 | Ensemble sampling frequency | 30 Hz | 1–60 Hz |
 | Histogram sampling rate | 10 Hz | 1–60 Hz |
@@ -114,7 +132,7 @@ Switch between the **current batch** and **cumulative** statistics, or reset the
 | Particle 1 / Particle 2 mass | 1 u each | 0.1–200 u; both sliders always available |
 | Bond length | 0.74 Å | 0.2–3 Å, slider and exact input |
 | Match particle 1 | On | Particle 2 follows Particle 1; editing Particle 2 turns matching off |
-| Rotor colors | Green / violet | Also blue / orange or single mint |
+| Rotor colors | Green / violet | Blue / orange, single mint, or custom RGB colors |
 | Particle occlusion | Off | Enable to hide particles behind nearer surfaces |
 | Superposition / time evolution | Off / On | Eigenstates and superpositions both evolve |
 
@@ -124,9 +142,11 @@ Double-click a slider to restore its default. Sampling frequency controls new or
 
 The default molecule is an idealized hydrogen rigid rotor with **1 u per atom** and a **0.74 Å** bond length. **Particles & bond** shows Particle 1 mass, Particle 2 mass, then Bond length. **Match particle 1**, beside the second slider, starts on: Particle 2 follows edits to Particle 1. Editing Particle 2's slider or exact value turns matching off and allows independent masses. Turning matching on copies Particle 1's current mass to Particle 2. Both sliders stay available throughout. The reduced mass is μ = m₁m₂/(m₁ + m₂), and the moment of inertia is I = μr². The heavier particle sits closer to the center of mass. At each selected bond length, both rotor views preserve the separation and rotate about that center.
 
-Choose **H₂, HD, N₂, or CO** to apply a rounded molecular model, then adjust its masses and bond length freely. Preset bond lengths use rounded [NIST CCCBDB experimental values](https://cccbdb.nist.gov/bondlengthmodel2x.asp?basis=25&method=63); masses are simplified educational values. Changing the bond length updates the geometry in both rotor views, the display scale of the wavefunction/probability surface, the energies, and both physical clocks. Cameras keep larger molecules in view. The normalized angular wavefunction itself remains independent of molecular size.
+Choose **H₂, HD, HF, or CO** to apply a rounded molecular model, then adjust its masses and bond length freely. HF uses 1 u / 19 u and a 0.92 Å bond, rounded from the [NIST experimental HF geometry](https://cccbdb.nist.gov/expgeom2x.asp?casno=7664393). Preset bond lengths use rounded [NIST CCCBDB experimental values](https://cccbdb.nist.gov/bondlengthmodel2x.asp?basis=25&method=63); masses are simplified educational values. Changing the bond length updates the geometry in both rotor views, the display scale of the wavefunction/probability surface, the energies, and both physical clocks. Cameras keep larger molecules in view. The normalized angular wavefunction itself remains independent of molecular size.
 
-The ensemble offers green/violet, blue/orange, and single-mint color presets. The **Occlusion** switch sits beside rotor opacity. With it off, overlapping particles remain visible and their colors accumulate. Turning it on sets opacity to **100%** and disables the opacity slider while nearer particle surfaces hide those behind them. Turning it off restores the previously selected opacity. The wavefunction retains its separate opaque surface rendering.
+The ensemble offers green/violet, blue/orange, and single-mint color presets. A fourth **Custom** button opens a compact color wheel with brightness and exact RGB controls for each particle. Custom colors are retained when switching presets and update the view immediately.
+
+The **Occlusion** switch sits beside rotor opacity. With it off, overlapping particles remain visible and their colors accumulate. With it on, nearer particle surfaces hide those behind them, and opacity remains adjustable. The first ON profile uses **5,000 rotors, 45 Hz, 1 pm radius, and 100% opacity**. Rotor count, sampling rate, radius, and opacity are remembered separately for ON and OFF until the simulation is reset. The wavefunction retains its separate opaque surface rendering.
 
 ```text
 E_J = ℏ² J(J+1) / (2I)
@@ -137,7 +157,7 @@ L_z = m_J ℏ
 
 Classical motion matches each component state's energy and uses a fixed display clock across the entire J range. At 1× classical playback, one displayed second represents 0.1 picoseconds. At 1× quantum evolution, one displayed second represents 20 femtoseconds. Each has its own playback control. J = 0 has no classical rotation or angular momentum direction.
 
-The **quantized energy ladder** shows J = 0, 1, 2, 3 with energy-proportional spacing, plus higher occupied levels separated by scale breaks. **State observables** summarize energy and angular momentum for the selected state or superposition.
+The shared analysis module stacks polar and azimuthal distributions on the left, with **State observables** and the **quantized energy ladder** stacked on the right. On narrow screens these columns stack vertically. The ladder shows J = 0, 1, 2, 3 with energy-proportional spacing, plus higher occupied levels separated by scale breaks. State observables summarize energy and angular momentum for the selected state, superposition, or instantaneous pulse populations.
 
 Quantum orientations are sampled with respect to solid angle, **dΩ = sin θ dθ dφ**. The ensemble is a collection of independent measurements of bond direction, rather than molecules following quantum trajectories. A bright value of |ψ|² near a pole does not by itself imply that most orientations lie there: probabilities also depend on the solid-angle measure.
 

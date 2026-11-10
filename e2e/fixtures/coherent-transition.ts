@@ -5,8 +5,9 @@ import { createAngularWavefunction } from '../../src/physics/superposition'
 import { laboratoryCoefficients, rabiCoefficients } from '../../src/physics/transition'
 import { packGeometry, unpackGeometry } from '../../src/preparation/geometry'
 import type { SurfaceQuantity } from '../../src/types'
+import { wavefunctionColor } from '../../src/rendering/wave-colors'
 
-declare global { interface Window { coherentGPU: { cases: { state: number[]; quantity: string; progress: number; error: number; endpointError?: number }[] } } }
+declare global { interface Window { coherentGPU: { cases: { state: number[]; quantity: string; progress: number; error: number; colorError: number; colorSamples: number; endpointError?: number }[] } } }
 const renderer = new THREE.WebGLRenderer({ antialias: false })
 const camera = new THREE.Camera(), scene = new THREE.Scene()
 const cases: Window['coherentGPU']['cases'] = []
@@ -25,8 +26,9 @@ for (const [j, m, j2, m2] of [[1, 1, 2, 0], [0, 0, 1, 0], [50, -50, 49, -49]]) {
     const captureGeometry = geometry.clone(), pixels = new Float32Array(count * 3)
     for (let i = 0; i < count; i++) { pixels[i * 3] = 2 * ((i % width + 0.5) / width) - 1; pixels[i * 3 + 1] = 2 * ((Math.floor(i / width) + 0.5) / height) - 1 }
     captureGeometry.setAttribute('position', new THREE.BufferAttribute(pixels, 3)); captureGeometry.setIndex(null)
-    const material = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, uniforms: shader.uniforms,
-      vertexShader: `precision highp float;\n#define attribute in\n${vertexEvolution}\nin vec3 position; out vec3 captured; void main() { captured = evolveWave().position; gl_Position = vec4(position,1.0); gl_PointSize = 1.0; }`,
+    const captureColors = { value: 0 }
+    const material = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, uniforms: { ...shader.uniforms, captureColors },
+      vertexShader: `precision highp float;\n#define attribute in\n${vertexEvolution}\nin vec3 position; uniform float captureColors; out vec3 captured; void main() { WaveVertex wave = evolveWave(); captured = captureColors > 0.5 ? wave.color : wave.position; gl_Position = vec4(position,1.0); gl_PointSize = 1.0; }`,
       fragmentShader: 'precision highp float; in vec3 captured; out vec4 result; void main() { result = vec4(captured,1.0); }',
     })
     const points = new THREE.Points(captureGeometry, material); points.frustumCulled = false; scene.add(points)
@@ -34,13 +36,18 @@ for (const [j, m, j2, m2] of [[1, 1, 2, 0], [0, 0, 1, 0], [50, -50, 49, -49]]) {
     for (const progress of [0, 0.5, 1]) {
       const c = laboratoryCoefficients(rabiCoefficients(progress * Math.PI, 1, 0.73), progress * 2.1, progress * 8.4)
       evolution.setCoefficients(c, true)
+      captureColors.value = 0
       renderer.setRenderTarget(target); renderer.render(scene, camera)
       const values = new Float32Array(width * height * 4); renderer.readRenderTargetPixels(target, 0, 0, width, height, values)
+      captureColors.value = 1
+      renderer.render(scene, camera)
+      const colors = new Float32Array(values.length); renderer.readRenderTargetPixels(target, 0, 0, width, height, colors)
       const maxima = shader.uniforms.waveMaxima.value as THREE.Vector3
       const maximum = quantity === 'jointProbability' ? maxima.z : quantity === 'probability' ? maxima.y : maxima.x
       const directions = geometry.getAttribute('waveDirection')
       const { widthSegments: columns, heightSegments: rows } = source.parameters
-      let error = 0, endpointError = 0
+      let error = 0, endpointError = 0, colorError = 0, colorSamples = 0
+      const expectedColor = new THREE.Color()
       const eigen = progress === 0 || progress === 1 ? createAngularWavefunction({ j: progress === 0 ? j : j2, m: progress === 0 ? m : m2 }) : undefined
       let eigenMaximum = 0
       if (eigen && (quantity === 'probability' || quantity === 'jointProbability')) for (let row = 0; row <= rows; row++) {
@@ -54,12 +61,18 @@ for (const [j, m, j2, m2] of [[1, 1, 2, 0], [0, 0, 1, 0], [50, -50, 49, -49]]) {
         const value = quantity === 'probability' ? psi.probability : quantity === 'jointProbability' ? psi.probability * st : quantity === 'real' ? Math.abs(psi.re) : quantity === 'imaginary' ? Math.abs(psi.im) : psi.magnitude
         const direction = new THREE.Vector3().fromBufferAttribute(directions, i).normalize()
         for (let axis = 0; axis < 3; axis++) error = Math.max(error, Math.abs(values[i * 4 + axis] - direction.getComponent(axis) * value * 1.9 / maximum))
+        // Phase/sign is undefined at nodes; compare colors on resolved surface points.
+        if (psi.magnitude > 1e-5 && value > 1e-5) {
+          const expected = wavefunctionColor(psi.re, psi.im, quantity, expectedColor).toArray()
+          for (let axis = 0; axis < 3; axis++) colorError = Math.max(colorError, Math.abs(colors[i * 4 + axis] - expected[axis]))
+          colorSamples++
+        }
         if (eigen && eigenMaximum > 0) {
           const expected = eigen.evaluate(u, phi).probability * (quantity === 'jointProbability' ? st : 1) * 1.9 / eigenMaximum
           endpointError = Math.max(endpointError, Math.abs(Math.hypot(values[i * 4], values[i * 4 + 1], values[i * 4 + 2]) - expected))
         }
       }
-      cases.push({ state: [j, m, j2, m2], quantity, progress, error, endpointError: eigenMaximum > 0 ? endpointError : undefined })
+      cases.push({ state: [j, m, j2, m2], quantity, progress, error, colorError, colorSamples, endpointError: eigenMaximum > 0 ? endpointError : undefined })
     }
     scene.remove(points); target.dispose(); material.dispose(); controllerMaterial.dispose(); captureGeometry.dispose(); geometry.dispose(); source.dispose()
   }

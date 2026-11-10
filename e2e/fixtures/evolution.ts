@@ -23,7 +23,7 @@ const positionError = (source: THREE.BufferGeometry, reference: THREE.BufferGeom
   points.setAttribute('waveDerivative', source.getAttribute('waveDerivative').clone())
   const data = source.userData.waveEvolution as WaveEvolutionData
   const material = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3,
-    uniforms: { waveEnabled: { value: 1 }, wavePhases: { value: new THREE.Vector4(Math.cos(phases[0]), Math.sin(phases[0]), Math.cos(phases[1]), Math.sin(phases[1])) }, waveModes: { value: new THREE.Vector4(data.m, data.m2, data.normalization, 2) }, waveMaxima: { value: new THREE.Vector3(...data.maxima) }, wavePhaseColor: { value: 0 }, waveCyan: { value: new THREE.Color('white') }, waveViolet: { value: new THREE.Color('white') } },
+    uniforms: { waveEnabled: { value: 1 }, wavePhases: { value: new THREE.Vector4(Math.cos(phases[0]), Math.sin(phases[0]), Math.cos(phases[1]), Math.sin(phases[1])) }, waveModes: { value: new THREE.Vector4(data.m, data.m2, data.normalization, 2) }, waveMaxima: { value: new THREE.Vector3(...data.maxima) } },
     vertexShader: `precision highp float;\n#define PI 3.141592653589793\n#define attribute in\n${vertexEvolution}\nin vec3 position; out vec3 captured; void main() { captured = evolveWave().position; gl_Position = vec4(position, 1.0); gl_PointSize = 1.0; }`,
     fragmentShader: 'precision highp float; in vec3 captured; out vec4 result; void main() { result = vec4(captured, 1.0); }',
   })

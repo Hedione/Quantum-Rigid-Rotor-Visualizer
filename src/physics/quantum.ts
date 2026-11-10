@@ -97,29 +97,6 @@ export function polarAngleDensity(j: number, m: number, theta: number): number {
   return polarDensity(j, m, Math.cos(theta)) * Math.max(0, Math.sin(theta))
 }
 
-/** Interior polar nodes bracketed in θ, which resolves high-J roots near the poles. */
-export function polarNodeRoots(j: number, m: number): number[] {
-  const amplitude = getPolarAmplitude(j, m), roots: number[] = []
-  const steps = Math.max(1200, 16 * (j + 1))
-  let lastX = -Math.cos(1e-8), previous = amplitude(lastX)
-  for (let i = 1; i <= steps; i++) {
-    const x = -Math.cos(Math.min(Math.PI - 1e-8, i * Math.PI / steps))
-    const current = amplitude(x)
-    if (current === 0) continue
-    if (previous !== 0 && Math.sign(current) !== Math.sign(previous)) {
-      let lo = lastX, hi = x, sign = Math.sign(previous)
-      for (let k = 0; k < 35; k++) {
-        const mid = (lo + hi) / 2, value = amplitude(mid)
-        if (Math.sign(value) !== sign) hi = mid
-        else lo = mid
-      }
-      roots.push((lo + hi) / 2)
-    }
-    lastX = x; previous = current
-  }
-  return roots
-}
-
 export function quantumQuantities(j: number, m: number, inertia: number) {
   validateState(j, m)
   if (!(inertia > 0) || !Number.isFinite(inertia)) throw new RangeError('Moment of inertia must be finite and positive')

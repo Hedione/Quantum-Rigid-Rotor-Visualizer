@@ -1,11 +1,15 @@
 import * as THREE from 'three'
-import type { RotorPalette } from '../types'
+import type { RotorPalette, Settings } from '../types'
 import type { EnsembleMeshes } from '../physics/instancing'
 
-export const ROTOR_PALETTES: Record<RotorPalette, { label: string; first: string; second: string; bond: string }> = {
+export const ROTOR_PALETTES: Record<Exclude<RotorPalette, 'custom'>, { label: string; first: string; second: string; bond: string }> = {
   greenViolet: { label: 'Green / violet', first: '#00f58a', second: '#aa28ff', bond: '#286d5d' },
   blueOrange: { label: 'Blue / orange', first: '#2f9fff', second: '#ff9b32', bond: '#536d8c' },
   mint: { label: 'Single mint', first: '#54dfca', second: '#54dfca', bond: '#286d5d' },
+}
+
+export function getRotorPalette(settings: Pick<Settings, 'rotorPalette' | 'customRotorColor1' | 'customRotorColor2'>) {
+  return settings.rotorPalette === 'custom' ? { label: 'Custom', first: settings.customRotorColor1, second: settings.customRotorColor2, bond: '#536d8c' } : ROTOR_PALETTES[settings.rotorPalette]
 }
 
 /** A shared depth pass resolves the nearest particle independently of instance/draw order. */

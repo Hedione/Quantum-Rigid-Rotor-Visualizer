@@ -3,6 +3,8 @@ import { expect, test } from '@playwright/test'
 declare global { interface Window { histogramPreparations: number } }
 
 test('histogram resolution preserves samples and evolution has an independent speed slider', async ({ page }) => {
+  // Multiple responsive layouts and 5,000 rotors on the software WebGL renderer.
+  test.setTimeout(120000)
   await page.addInitScript(() => {
     window.histogramPreparations = 0
     const NativeWorker = window.Worker
@@ -27,10 +29,13 @@ test('histogram resolution preserves samples and evolution has an independent sp
   await expect(rate).toHaveValue('10')
   const footer = diagnostics.locator('.diagnostics-footer')
   const actions = await footer.locator('.diagnostics-footer-actions').boundingBox()
+  const rangeRows: number[] = []
   for (const name of ['Histogram bins', 'Histogram sampling rate']) {
     const box = await footer.getByRole('slider', { name, exact: true }).locator('..').boundingBox()
-    expect(Math.abs(box!.y + box!.height / 2 - actions!.y - actions!.height / 2)).toBeLessThan(2)
+    expect(box!.y).toBeGreaterThanOrEqual(actions!.y + actions!.height)
+    rangeRows.push(box!.y)
   }
+  expect(Math.abs(rangeRows[0] - rangeRows[1])).toBeLessThan(1)
   await rate.focus(); await rate.press('Home')
   await expect(rate).toHaveValue('1')
   await expect(diagnostics).toHaveAttribute('data-update-hz', '1')
@@ -64,7 +69,7 @@ test('histogram resolution preserves samples and evolution has an independent sp
   await expect(timeScale).toHaveAttribute('data-femtoseconds-per-second', '20')
   await expect(evolution).not.toContainText('fs')
   expect(await speed.locator('..').getByTestId('evolution-time-scale').count()).toBe(1)
-  await expect(timeScale.locator('sub')).toHaveText(['real', 'sim'])
+  await expect(timeScale).toHaveText('20 fs/s')
   await expect(speed).toHaveAttribute('aria-valuenow', '1'); await expect(speed).toHaveAttribute('aria-valuemin', '0.01'); await expect(speed).toHaveAttribute('aria-valuemax', '100')
   await expect(speed).toHaveAttribute('data-scale', 'logarithmic')
   await expect(speed).toHaveValue('5000')
@@ -102,6 +107,15 @@ test('histogram resolution preserves samples and evolution has an independent sp
     const row = page.locator('.evolution-playback-control')
     expect(await row.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     expect(await timeScale.locator('..').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+    const heading = row.locator('.control-label')
+    const titleBox = await heading.locator(':scope > span').first().boundingBox()
+    const rateBox = await heading.locator('.range-physical-value').boundingBox(), multiplierBox = await heading.locator('output').boundingBox()
+    expect(titleBox!.height).toBe(15)
+    expect(titleBox!.y + titleBox!.height).toBeLessThanOrEqual(rateBox!.y)
+    expect(rateBox!.x).toBeGreaterThanOrEqual(sliderBox!.x)
+    expect(rateBox!.x + rateBox!.width).toBeLessThanOrEqual(multiplierBox!.x)
+    expect(Math.abs(multiplierBox!.x + multiplierBox!.width - sliderBox!.x - sliderBox!.width)).toBeLessThan(1)
+    expect(Math.abs(rateBox!.y + rateBox!.height / 2 - multiplierBox!.y - multiplierBox!.height / 2)).toBeLessThan(1)
   }
   await evolution.click()
   await expect(speed).toBeDisabled()
@@ -132,22 +146,22 @@ test('lowering histogram sampling reduces recorded batches while quantum time ke
   await rate.focus(); await rate.press('Home')
   await expect(rate).toHaveValue('1')
   const count = page.getByTestId('cumulative-samples')
-  await expect(count).toHaveText('2,500')
+  await expect(count).toHaveText('5,000')
   const advance = async (milliseconds: number) => {
     await page.evaluate(delta => { (window as typeof window & { histogramTestTime: number }).histogramTestTime += delta }, milliseconds)
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
   }
   await advance(0)
   await advance(250); await advance(250); await advance(250)
-  await expect(count).toHaveText('2,500')
+  await expect(count).toHaveText('5,000')
   expect(Number(await page.getByTestId('quantum-time').getAttribute('data-time'))).toBeGreaterThan(0)
   await advance(250)
-  await expect(count).toHaveText('5,000')
+  await expect(count).toHaveText('10,000')
   await advance(500)
-  await expect(count).toHaveText('5,000')
+  await expect(count).toHaveText('10,000')
   await rate.focus(); await rate.press('End')
   await advance(0)
   await advance(17)
-  await expect(count).toHaveText('7,500')
+  await expect(count).toHaveText('15,000')
   await expect(page.getByRole('slider', { name: 'Sampling frequency', exact: true })).toHaveValue('30')
 })

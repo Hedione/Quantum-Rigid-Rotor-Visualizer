@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getPolarAmplitude, polarDensity, polarNodeRoots, sphericalHarmonic } from './quantum'
+import { getPolarAmplitude, polarDensity, sphericalHarmonic } from './quantum'
 import { cdfAtU, getOrientationCDF, inverseCDF, OrientationEnsemble, polarBinDensities, polarCapProbability } from './sampling'
 
 // Independent Gauss–Legendre quadrature integrates polynomial densities through degree 400.
@@ -99,14 +99,5 @@ describe('high-J numerical stability and correspondence', () => {
       expect(variance).toBeLessThan(previousVariance)
       previousVariance = variance
     }
-  })
-  it('resolves high-J polar nodes even near the poles and at near-maximal order', () => {
-    expect(polarNodeRoots(200, 0)).toHaveLength(200)
-    expect(polarNodeRoots(200, 100)).toHaveLength(100)
-    expect(polarNodeRoots(200, 200)).toHaveLength(0)
-    const nearStretched = polarNodeRoots(200, 198)
-    expect(nearStretched).toHaveLength(2)
-    expect(nearStretched[0]).toBeCloseTo(-1 / Math.sqrt(399), 10)
-    expect(nearStretched[1]).toBeCloseTo(1 / Math.sqrt(399), 10)
   })
 })

@@ -33,7 +33,7 @@ const configurations: { mode: string; state: Partial<Settings>; frames: number }
   ...([
     [1, 1, 2, 0, 'sigmaMinus'], [0, 0, 1, 0, 'pi'], [0, 0, 1, 1, 'sigmaPlus'],
     [50, 0, 49, -1, 'sigmaMinus'], [50, -50, 49, -49, 'sigmaPlus'],
-  ] as [number, number, number, number, Polarization][]).map(([j, m, j2, m2, polarization]) => ({ mode: 'π-pulse', state: { j, m, j2, m2, polarization, superposition: true, coherentTransition: true, transitionPlaying: true, drivePhase: 0.73 }, frames: 101 })),
+  ] as [number, number, number, number, Polarization][]).map(([j, m, j2, m2, polarization]) => ({ mode: 'π-pulse', state: { j, m, j2, m2, polarization, dipoleMoment: 1, superposition: true, coherentTransition: true, transitionPlaying: true, drivePhase: 0.73 }, frames: 101 })),
 ]
 
 for (const configuration of configurations) for (const quantity of ['probability', 'jointProbability'] as const) {

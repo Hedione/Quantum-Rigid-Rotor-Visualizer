@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { createParticleDepthPass } from '../../src/rendering/rotors'
 
 declare global {
-  interface Window { particleOcclusionResults: { overlapping: number[]; occluded: number[]; reordered: number[]; restored: number[]; moved: number[]; oldPosition: number[]; glError: number } }
+  interface Window { particleOcclusionResults: { overlapping: number[]; occluded: number[]; reordered: number[]; translucent: number[]; restored: number[]; moved: number[]; oldPosition: number[]; glError: number } }
 }
 
 const renderer = new THREE.WebGLRenderer({ antialias: false })
@@ -36,11 +36,16 @@ scene.add(pass.group); red.depthTest = blue.depthTest = true
 const occluded = render()
 meshes.atomsA.renderOrder = 20; meshes.atomsB.renderOrder = 10
 const reordered = render()
+red.blending = blue.blending = THREE.NormalBlending
+red.opacity = 0.25
+const translucent = render()
+red.opacity = 1
+red.blending = blue.blending = THREE.AdditiveBlending
 scene.remove(pass.group); pass.dispose(); red.depthTest = blue.depthTest = false
 const restored = render()
 meshes.atomsA.setMatrixAt(0, new THREE.Matrix4().makeTranslation(1, 0, 0.6))
 meshes.atomsB.setMatrixAt(0, new THREE.Matrix4().makeTranslation(1, 0, -0.6))
 meshes.atomsA.instanceMatrix.needsUpdate = meshes.atomsB.instanceMatrix.needsUpdate = true
 const moved = render(72), oldPosition = render()
-window.particleOcclusionResults = { overlapping, occluded, reordered, restored, moved, oldPosition, glError: renderer.getContext().getError() }
+window.particleOcclusionResults = { overlapping, occluded, reordered, translucent, restored, moved, oldPosition, glError: renderer.getContext().getError() }
 target.dispose(); geometry.dispose(); firstGeometry.dispose(); secondGeometry.dispose(); red.dispose(); blue.dispose(); renderer.dispose()

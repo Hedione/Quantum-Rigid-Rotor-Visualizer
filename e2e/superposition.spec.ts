@@ -1,4 +1,11 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+
+async function selectPair(page: Page, j: number, m: number, j2: number, m2: number) {
+  for (const [name, value] of [['J', j], ['mJ', m], ['Second J', j2], ['Second mJ', m2]] as const) {
+    const input = page.getByRole('spinbutton', { name, exact: true })
+    await input.fill(String(value)); await input.press('Enter')
+  }
+}
 
 test('coherent superpositions show two classical comparisons and nonuniform azimuthal probability', async ({ page }) => {
   const failures: string[] = []
@@ -9,7 +16,8 @@ test('coherent superpositions show two classical comparisons and nonuniform azim
   const toggle = page.getByRole('button', { name: 'Superposition mode', exact: true })
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
   await expect(page.getByRole('switch', { name: 'Superposition mode', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('spinbutton', { name: 'Second J', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('spinbutton', { name: 'Second J', exact: true })).toBeVisible()
+  await expect(page.getByRole('spinbutton', { name: 'Second J', exact: true })).toBeDisabled()
   await expect(page.getByTestId('scene-classical')).toHaveAttribute('data-rotor-count', '1')
   await toggle.click()
   await expect(page.getByRole('button', { name: 'Superposition mode', exact: true })).toHaveAttribute('aria-expanded', 'true')
@@ -25,7 +33,7 @@ test('coherent superpositions show two classical comparisons and nonuniform azim
   const azimuth = page.getByRole('img', { name: /^Azimuthal superposition probability/ })
   expect(Number(await azimuth.getAttribute('data-theory-max')) - Number(await azimuth.getAttribute('data-theory-min'))).toBeGreaterThan(0.2)
   await page.getByRole('button', { name: 'Pause sampling', exact: true }).click()
-  await page.getByRole('button', { name: /^Two lobes/ }).click()
+  await selectPair(page, 1, 1, 1, -1)
   await expect(stage).toHaveAttribute('data-displayed-m', '1')
   await expect(stage).toHaveAttribute('data-displayed-m2', '-1')
   await expect(stage).toHaveAttribute('aria-busy', 'false')
@@ -48,14 +56,14 @@ test('coherent superpositions show two classical comparisons and nonuniform azim
   await radial.getByRole('button', { name: 'Imaginary component', exact: true }).click()
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await expect(page.locator('.zero-component')).toHaveCount(0)
-  await page.getByRole('button', { name: /^Four lobes/ }).click()
+  await selectPair(page, 2, 2, 2, -2)
   await expect(stage).toHaveAttribute('data-displayed-j2', '2')
   await expect(stage).toHaveAttribute('data-displayed-m2', '-2')
   await radial.getByRole('button', { name: 'Probability density', exact: true }).click()
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await expect(page.getByRole('button', { name: 'Match quantum L and Lz', exact: true })).toHaveCount(0)
   await expect(page.getByRole('slider', { name: 'L azimuth', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Randomize both states', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Randomize', exact: true })).toBeVisible()
   await expect(page.getByRole('slider', { name: 'L polar angle', exact: true })).toHaveCount(0)
   await page.screenshot({ path: 'test-results/superposition-four-lobes.png', fullPage: true })
   await page.setViewportSize({ width: 390, height: 844 })
@@ -79,23 +87,23 @@ test('the second state stays independent, is capped safely, and disabling superp
   await expect(stage).toHaveAttribute('data-displayed-m2', '-3')
   await expect(page.getByRole('spinbutton', { name: 'J', exact: true })).toHaveValue('1')
   await expect(page.getByRole('spinbutton', { name: 'mJ', exact: true })).toHaveValue('0')
-  await page.getByRole('button', { name: /^Four lobes/ }).click()
+  await selectPair(page, 2, 2, 2, -2)
   await expect(stage).toHaveAttribute('data-displayed-m', '2')
   await expect(stage).toHaveAttribute('data-displayed-m2', '-2')
   await secondM.fill('2'); await secondM.press('Enter')
   await expect(stage).toHaveAttribute('data-displayed-m2', '2')
   await expect(page.getByText('Identical states normalize to a single eigenstate.', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Enable J > 10', exact: true }).click()
+  await page.getByRole('button', { name: 'Explore high J', exact: true }).click()
   await secondJ.fill('200'); await secondJ.press('Enter')
   await expect(secondJ).toHaveValue('50')
   await expect(stage).toHaveAttribute('data-displayed-j2', '50')
-  await page.getByRole('button', { name: 'Enable J > 10', exact: true }).click()
+  await page.getByRole('button', { name: 'Explore high J', exact: true }).click()
   await expect(secondJ).toHaveValue('2')
   await expect(secondM).toHaveValue('2')
   await expect(page.getByRole('button', { name: /^Six lobes/ })).toHaveCount(0)
   for (const maximum of [50, 10]) {
-    await page.getByRole('button', { name: 'Enable J > 10', exact: true }).click()
-    await page.getByRole('button', { name: 'Randomize both states', exact: true }).click()
+    await page.getByRole('button', { name: 'Explore high J', exact: true }).click()
+    await page.getByRole('button', { name: 'Randomize', exact: true }).click()
     const fields = ['J', 'mJ', 'Second J', 'Second mJ']
     const values = await Promise.all(fields.map(name => page.getByRole('spinbutton', { name, exact: true }).inputValue().then(Number)))
     for (const [j, m] of [[values[0], values[1]], [values[2], values[3]]]) {

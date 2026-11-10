@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { setRotorCount } from './controls'
 
 test('unified production experiment, logarithmic controls, and energy-matched motion', async ({ page }) => {
   const failures: string[] = []
@@ -10,13 +11,13 @@ test('unified production experiment, logarithmic controls, and energy-matched mo
   await expect(page.locator('.stage-caption')).toHaveCount(0)
   await expect(page.getByText('Calculated locally. No data leaves your browser.', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'z axis', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Joint angular probability distribution', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('button', { name: 'Wavefunction', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('heading', { name: 'Wavefunction & probability', exact: true })).toBeVisible()
   await expect(page.getByTestId('pane-wavefunction').locator('.pane-label > span')).toHaveText('WAVEFUNCTION & PROBABILITY')
   await expect(page.getByRole('region', { name: 'Quantum state', exact: true }).locator('summary')).toHaveCount(0)
   await page.getByRole('heading', { name: 'Quantum state', exact: true }).click()
   await expect(page.getByRole('spinbutton', { name: 'J', exact: true })).toBeVisible()
-  await expect(page.locator('.stepper label sub')).toHaveText('J')
+  await expect(page.locator('.state-steppers').first().locator('.stepper label sub')).toHaveText('J')
   for (const name of ['J', 'mJ']) {
     const input = await page.getByRole('spinbutton', { name, exact: true }).boundingBox()
     const slider = await page.getByRole('slider', { name, exact: true }).boundingBox()
@@ -38,10 +39,10 @@ test('unified production experiment, logarithmic controls, and energy-matched mo
   expect(ensemble!.width).toBeGreaterThan(classical!.width * 2)
   expect(ensemble!.width * ensemble!.height).toBeGreaterThan(classical!.width * classical!.height * 2)
 
-  const count = page.getByRole('spinbutton', { name: 'Number of Classical Rotors exact value' })
+  await expect(page.getByRole('spinbutton', { name: 'Number of Classical Rotors exact value' })).toHaveCount(0)
   const countSlider = page.getByRole('slider', { name: 'Number of Classical Rotors', exact: true })
   const opacity = page.getByRole('slider', { name: 'Rotor opacity', exact: true })
-  await expect(count).toHaveValue('2500')
+  await expect(countSlider).toHaveAttribute('aria-valuenow', '5000')
   await expect(countSlider).toHaveAttribute('data-scale', 'logarithmic')
   await expect(opacity).toHaveAttribute('aria-valuetext', '1%')
   await expect(page.getByRole('slider', { name: 'Sampling frequency', exact: true })).toHaveValue('30')
@@ -61,14 +62,14 @@ test('unified production experiment, logarithmic controls, and energy-matched mo
   await page.getByRole('button', { name: 'Pause sampling', exact: true }).click()
   await countSlider.focus()
   await countSlider.press('Home')
-  await expect(count).toHaveValue('1')
+  await expect(countSlider).toHaveAttribute('aria-valuenow', '1')
   await expect(page.getByTestId('scene-ensemble')).toHaveAttribute('data-rotor-count', '1')
   await countSlider.press('End')
-  await expect(count).toHaveValue('10000')
+  await expect(countSlider).toHaveAttribute('aria-valuenow', '10000')
   await expect(page.getByTestId('scene-ensemble')).toHaveAttribute('data-rotor-count', '10000')
-  await count.fill('3456')
-  await expect(page.getByTestId('scene-ensemble')).toHaveAttribute('data-rotor-count', '3456')
-  await count.fill('2500')
+  await setRotorCount(page, 1000)
+  await expect(page.getByTestId('scene-ensemble')).toHaveAttribute('data-rotor-count', '1000')
+  await setRotorCount(page, 2500)
   await opacity.focus()
   await opacity.press('Home')
   await expect(opacity).toHaveAttribute('aria-valuetext', '0.5%')
@@ -139,11 +140,11 @@ test('wavefunction controls, simplified interface, and mobile layout', async ({ 
   await page.getByRole('spinbutton', { name: 'mJ', exact: true }).fill('-1')
   await page.getByRole('spinbutton', { name: 'mJ', exact: true }).press('Enter')
   await expect(page.getByRole('region', { name: 'Unified classical and quantum rotor experiment' })).toHaveAttribute('aria-busy', 'false')
-  for (const quantity of ['Probability density', 'Real component', 'Imaginary component', 'Magnitude']) {
+  for (const quantity of ['Probability density', 'Real component', 'Imaginary component', 'Wavefunction']) {
     await radial.getByRole('button', { name: quantity, exact: true }).click()
     await expect(page.getByTestId('scene-wavefunction')).toBeVisible()
   }
-  await page.getByRole('button', { name: 'Show nodal structures', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Show nodal structures', exact: true })).toHaveCount(0)
   await page.getByRole('spinbutton', { name: 'J', exact: true }).fill('10')
   await page.getByRole('spinbutton', { name: 'J', exact: true }).press('Enter')
   await expect(page.getByRole('region', { name: 'Unified classical and quantum rotor experiment' })).toHaveAttribute('aria-busy', 'false')
@@ -201,15 +202,15 @@ test('double-clicking sliders restores exact defaults and constrained quantum st
   const stage = page.getByRole('region', { name: 'Unified classical and quantum rotor experiment' })
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await page.getByRole('button', { name: 'Pause sampling', exact: true }).click()
-  for (const [name, expected] of [['Number of Classical Rotors', '2500'], ['Rotor opacity', '0.01'], ['Sampling frequency', '30'], ['Playback speed', '1']]) {
+  for (const [name, expected] of [['Number of Classical Rotors', '5000'], ['Rotor opacity', '0.01'], ['Sampling frequency', '30'], ['Playback speed', '1']]) {
     const slider = page.getByRole('slider', { name, exact: true })
     await slider.focus(); await slider.press(name === 'Sampling frequency' ? 'Home' : 'End')
     await expect(slider).not.toHaveAttribute('aria-valuenow', expected)
     await slider.dblclick()
     await expect(slider).toHaveAttribute('aria-valuenow', expected)
   }
-  await expect(page.getByRole('spinbutton', { name: 'Number of Classical Rotors exact value', exact: true })).toHaveValue('2500')
-  await expect(page.getByTestId('scene-ensemble')).toHaveAttribute('data-rotor-count', '2500')
+  await expect(page.getByRole('slider', { name: 'Number of Classical Rotors', exact: true })).toHaveAttribute('aria-valuenow', '5000')
+  await expect(page.getByTestId('scene-ensemble')).toHaveAttribute('data-rotor-count', '5000')
   const j = page.getByRole('slider', { name: 'J', exact: true })
   const m = page.getByRole('slider', { name: 'mJ', exact: true })
   await j.focus(); await j.press('End')
@@ -223,7 +224,7 @@ test('double-clicking sliders restores exact defaults and constrained quantum st
     await slider.focus(); await slider.press('End'); await slider.dblclick()
     await expect(page.getByRole('spinbutton', { name, exact: true })).toHaveValue(expected)
   }
-  await page.getByRole('button', { name: 'Enable J > 10', exact: true }).click()
+  await page.getByRole('button', { name: 'Explore high J', exact: true }).click()
   const jInput = page.getByRole('spinbutton', { name: 'J', exact: true })
   await jInput.fill('7'); await jInput.press('Enter')
   await m.dblclick()

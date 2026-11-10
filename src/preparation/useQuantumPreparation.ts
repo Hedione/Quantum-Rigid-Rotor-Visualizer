@@ -36,7 +36,7 @@ export function useQuantumPreparation(settings: Settings) {
           const next: PreparedQuantumState = {
             key: data.key, state: data.state, surface: unpackGeometry(data.surface),
             overlay: data.overlay ? unpackGeometry(data.overlay) : undefined,
-            nodes: data.nodes ? unpackGeometry(data.nodes) : undefined, distribution: data.distribution,
+            distribution: data.distribution,
           }
           startTransition(() => { setPrepared(next); setError(null) })
         }
@@ -49,7 +49,7 @@ export function useQuantumPreparation(settings: Settings) {
 
   useEffect(() => { controller.current?.submit(desired.current) }, [key, epoch])
   useEffect(() => () => {
-    prepared?.surface.dispose(); prepared?.overlay?.dispose(); prepared?.nodes?.dispose()
+    prepared?.surface.dispose(); prepared?.overlay?.dispose()
   }, [prepared])
   return { prepared, pending: prepared?.key !== key, error, retry: () => setEpoch(previous => previous + 1) }
 }

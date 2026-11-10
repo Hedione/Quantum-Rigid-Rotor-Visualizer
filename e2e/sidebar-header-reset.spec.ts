@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { setRotorCount } from './controls'
 
 test('sidebar settings stay accessible and header information works on desktop and mobile', async ({ page }) => {
   const errors: string[] = []
@@ -78,7 +79,7 @@ test('sidebar settings stay accessible and header information works on desktop a
     await expect(info).toHaveCSS('width', '27px')
     await expect(info).toHaveCSS('height', '27px')
     await expect(reset).toHaveCSS('height', '36px')
-    await expect(reset).toHaveCSS('font-size', width <= 720 ? '6px' : '7px')
+    await expect(reset).toHaveCSS('font-size', width <= 720 ? '7px' : '8px')
   }
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(sidebar).not.toBeVisible()
@@ -119,8 +120,10 @@ test('reset restores startup settings, clocks, samples, camera views, and chart 
   await page.getByRole('button', { name: 'Pause sampling', exact: true }).click()
   const classical = page.getByTestId('scene-classical').locator('canvas')
   const surface = page.getByTestId('scene-wavefunction').locator('canvas')
-  const initialClassical = await classical.screenshot()
-  const initialSurface = await surface.screenshot()
+  // Exclude the overlapping CSS label gradient's dithering from exact camera comparisons.
+  await page.addStyleTag({ content: '.pane-label { visibility: hidden !important; }' })
+  const initialClassical = await classical.screenshot({ path: test.info().outputPath('initial-classical.png') })
+  const initialSurface = await surface.screenshot({ path: test.info().outputPath('initial-surface.png') })
   const enter = async (name: string, value: string) => {
     const input = page.getByRole('spinbutton', { name, exact: true })
     await input.fill(value); await input.press('Enter')
@@ -129,7 +132,7 @@ test('reset restores startup settings, clocks, samples, camera views, and chart 
   await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Evolve in time', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await page.getByRole('button', { name: 'Carbon monoxide', exact: true }).click()
-  await enter('Number of Classical Rotors exact value', '17')
+  await setRotorCount(page, 17)
   for (const name of ['Playback speed', 'Sampling frequency', 'Histogram sampling rate']) {
     const slider = page.getByRole('slider', { name, exact: true })
     await slider.focus(); await slider.press('Home')
@@ -158,7 +161,8 @@ test('reset restores startup settings, clocks, samples, camera views, and chart 
   await expect(stage).toHaveAttribute('data-evolving', 'true')
   await expect(page.getByRole('spinbutton', { name: 'J', exact: true })).toHaveValue('1')
   await expect(page.getByRole('spinbutton', { name: 'mJ', exact: true })).toHaveValue('0')
-  await expect(page.getByTestId('superposition-controls')).toHaveCount(0)
+  await expect(page.getByTestId('superposition-controls')).toBeVisible()
+  await expect(page.getByRole('spinbutton', { name: 'Second J', exact: true })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Hydrogen', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('button', { name: 'Match particle 1', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('spinbutton', { name: 'Particle 1 mass exact value', exact: true })).toHaveValue('1')
@@ -168,16 +172,18 @@ test('reset restores startup settings, clocks, samples, camera views, and chart 
   await expect(page.getByRole('slider', { name: 'Histogram sampling rate', exact: true })).toHaveValue('10')
   await expect(page.getByRole('slider', { name: 'Rotor opacity', exact: true })).toHaveAttribute('aria-valuenow', '0.01')
   await expect(page.getByRole('button', { name: 'Particle occlusion', exact: true })).toHaveAttribute('aria-pressed', 'false')
-  await expect(page.getByTestId('scene-ensemble')).toHaveAttribute('data-rotor-count', '2500')
+  await expect(page.getByTestId('scene-ensemble')).toHaveAttribute('data-rotor-count', '5000')
   await expect(page.getByTestId('scene-ensemble')).toHaveAttribute('data-rotor-palette', 'greenViolet')
-  await expect(page.getByRole('button', { name: 'Joint angular probability distribution', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('button', { name: 'Wavefunction', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('button', { name: 'Density vs cos θ', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(bins).toHaveAttribute('aria-valuenow', '40')
   await expect(page.getByRole('button', { name: 'Current batch', exact: true })).toHaveAttribute('aria-pressed', 'false')
-  await expect(page.getByTestId('cumulative-samples')).toHaveText('2,500')
+  await expect(page.getByTestId('cumulative-samples')).toHaveText('5,000')
   await expect(page.getByRole('button', { name: 'Pause sampling', exact: true })).toBeVisible()
-  expect((await classical.screenshot()).equals(initialClassical)).toBe(true)
-  expect((await surface.screenshot()).equals(initialSurface)).toBe(true)
+  const resetClassical = await classical.screenshot({ path: test.info().outputPath('reset-classical.png') })
+  const resetSurface = await surface.screenshot({ path: test.info().outputPath('reset-surface.png') })
+  expect(resetClassical.equals(initialClassical)).toBe(true)
+  expect(resetSurface.equals(initialSurface)).toBe(true)
   await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Evolve in time', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('slider', { name: 'Evolution playback speed', exact: true })).toHaveAttribute('aria-valuenow', '1')

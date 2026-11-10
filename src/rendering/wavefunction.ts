@@ -1,13 +1,13 @@
 import * as THREE from 'three'
 import { createAngularWavefunction, type CoherentState } from '../physics/superposition'
-import { surfaceColorMode, type Settings } from '../types'
+import type { Settings } from '../types'
 import { attachEvolutionAttributes, createSurfaceEvolution } from './evolving-surface'
+import { wavefunctionColor } from './wave-colors'
 
 type SurfaceSettings = CoherentState & Pick<Settings, 'surfaceQuantity'>
 
 export function createWavefunctionGeometry(settings: SurfaceSettings, overlay = false) {
   const { j, m, surfaceQuantity } = settings
-  const colorMode = overlay ? 'density' : surfaceColorMode(surfaceQuantity)
   const paired = settings.superposition || settings.coherentTransition
   const secondJ = paired ? settings.j2 ?? 2 : j, secondM = paired ? settings.m2 ?? 1 : m
   const width = Math.max(192, 8 * Math.abs(m), 8 * Math.abs(secondM), settings.superposition ? 8 * Math.abs(m - secondM) : 0)
@@ -16,7 +16,6 @@ export function createWavefunctionGeometry(settings: SurfaceSettings, overlay = 
   const positions = mesh.attributes.position
   const colors = new Float32Array(positions.count * 3)
   const values = new Float32Array(positions.count)
-  const phases = new Float32Array(positions.count)
   const directions = new Float32Array(positions.count * 3)
   const wave = createAngularWavefunction(settings)
   const firstLatitudes = new Float64Array(height + 1), secondLatitudes = new Float64Array(height + 1)
@@ -29,7 +28,7 @@ export function createWavefunctionGeometry(settings: SurfaceSettings, overlay = 
     cosine2[x] = Math.cos(secondM * phi); sine2[x] = Math.sin(secondM * phi)
   }
   let maximum = 0
-  const color = new THREE.Color(), cyan = new THREE.Color('#54dfca'), violet = new THREE.Color('#a58bf4')
+  const color = new THREE.Color()
   // Only one normalized Legendre recurrence per latitude, rather than per vertex.
   for (let row = 0; row <= height; row++) {
     const theta = Math.PI * row / height, u = Math.cos(theta)
@@ -45,16 +44,13 @@ export function createWavefunctionGeometry(settings: SurfaceSettings, overlay = 
       const probability = re * re + im * im
       const value = overlay || surfaceQuantity === 'probability' ? probability : surfaceQuantity === 'jointProbability' ? probability * sinTheta : surfaceQuantity === 'real' ? re : surfaceQuantity === 'imaginary' ? im : Math.hypot(re, im)
       values[i] = Math.abs(value)
-      phases[i] = colorMode === 'phase' ? Math.atan2(im, re) : colorMode === 'sign' && value < 0 ? Math.PI : 0
+      wavefunctionColor(re, im, overlay ? 'probability' : surfaceQuantity, color).toArray(colors, i * 3)
       maximum = Math.max(maximum, Math.abs(value))
     }
   }
   for (let i = 0; i < positions.count; i++) {
     const radius = maximum > 1e-12 ? 1.9 * values[i] / maximum : 0
     positions.setXYZ(i, directions[i * 3] * radius, directions[i * 3 + 1] * radius, directions[i * 3 + 2] * radius)
-    color.copy(cyan).lerp(violet, (1 - Math.cos(phases[i])) / 2)
-    if (colorMode === 'phase') color.offsetHSL(Math.sin(phases[i]) * 0.07, 0, 0)
-    color.toArray(colors, i * 3)
   }
   mesh.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   mesh.computeVertexNormals()

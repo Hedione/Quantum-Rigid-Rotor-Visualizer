@@ -95,7 +95,7 @@ describe('coherent two-state rigid rotor', () => {
     for (const col of [48, 144]) {
       const i = 64 * 193 + col
       const imaginarySign = -Math.sign(positions.getY(i)) // ψ ∝ −i y.
-      const expected = new Color(imaginarySign > 0 ? '#54dfca' : '#a58bf4').toArray()
+      const expected = new Color(imaginarySign > 0 ? '#8faaf0' : '#f0b887').toArray()
       expect(colors.getX(i)).toBeCloseTo(expected[0], 6)
       expect(colors.getY(i)).toBeCloseTo(expected[1], 6)
       expect(colors.getZ(i)).toBeCloseTo(expected[2], 6)

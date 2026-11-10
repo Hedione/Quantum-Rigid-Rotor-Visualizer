@@ -97,7 +97,7 @@ describe('normalization throughout every quantum mode', () => {
   }, 120000)
 
   it('checks both densities and all amplitude views at 1,001 times across a complete pulse for four drive phases', () => {
-    const state = { ...defaultSettings, coherentTransition: true, j: 1, m: 1, j2: 2, m2: 0, transitionPlaying: true }
+    const state = { ...defaultSettings, dipoleMoment: 1, coherentTransition: true, j: 1, m: 1, j2: 2, m2: 0, transitionPlaying: true }
     const duration = Math.PI / (state.rabiFrequency * 1e12)
     for (const drivePhase of [0, 0.73, Math.PI / 2, Math.PI]) {
       const s = { ...state, drivePhase }, clock = new QuantumTimeline()
@@ -169,7 +169,7 @@ describe('normalization throughout every quantum mode', () => {
         check('theta CDF bins', thetaBinDensities(j, m, bins).reduce((a, b) => a + b * Math.PI / bins, 0), label)
       }
     }
-    const s = { ...defaultSettings, coherentTransition: true, superposition: true, j: 1, m: 1, j2: 2, m2: 0, transitionPlaying: true }
+    const s = { ...defaultSettings, dipoleMoment: 1, coherentTransition: true, superposition: true, j: 1, m: 1, j2: 2, m2: 0, transitionPlaying: true }
     const clock = new QuantumTimeline(); clock.configure(s, 0)
     const engine = new OrientationEnsemble(1, 1, 321, 1000, { j: 2, m: 0 }); engine.resetStatistics()
     for (let i = 0; i <= 100; i++) {
