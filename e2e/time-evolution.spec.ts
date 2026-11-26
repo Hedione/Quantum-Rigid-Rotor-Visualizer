@@ -1,3 +1,4 @@
+import { selectMode } from './controls'
 import { expect, test } from '@playwright/test'
 import { build } from 'esbuild'
 import { resolve } from 'node:path'
@@ -46,7 +47,7 @@ test('time evolution synchronizes sampled interference and the surface, and paus
   const stage = page.getByRole('region', { name: 'Unified classical and quantum rotor experiment' })
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await page.getByRole('button', { name: 'Pause sampling', exact: true }).click()
-  await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
+  await selectMode(page, 'superposition')
   const toggle = page.getByRole('button', { name: 'Evolve in time', exact: true })
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
   for (const [name, value] of [['J', '0'], ['Second J', '1'], ['Second mJ', '0']]) {

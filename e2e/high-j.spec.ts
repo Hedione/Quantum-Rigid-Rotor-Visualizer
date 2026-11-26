@@ -11,7 +11,7 @@ test('high-J demonstration narrows toward the classical plane without non-finite
   await expect(page.getByTestId('scene-ensemble')).toHaveAttribute('data-rotor-count', '5000')
   await expect(page.locator('.brand-subtitle')).toHaveText('QUANTUM & CLASSICAL ROTATIONAL DYNAMICS')
   await page.getByRole('button', { name: 'Randomize', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Superposition mode', exact: true })).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByRole('button', { name: 'Simulation mode', exact: true })).toContainText('Static mode')
   const randomizedJ = Number(await page.getByRole('spinbutton', { name: 'J', exact: true }).inputValue())
   const randomizedM = Number(await page.getByRole('spinbutton', { name: 'mJ', exact: true }).inputValue())
   expect(randomizedJ).toBeGreaterThanOrEqual(0); expect(randomizedJ).toBeLessThanOrEqual(10)

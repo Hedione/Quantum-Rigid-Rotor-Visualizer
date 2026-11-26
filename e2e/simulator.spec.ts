@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { setRotorCount } from './controls'
+import { setRotorCount, selectMode } from './controls'
 
 test('unified production experiment, logarithmic controls, and energy-matched motion', async ({ page }) => {
   const failures: string[] = []
@@ -14,8 +14,7 @@ test('unified production experiment, logarithmic controls, and energy-matched mo
   await expect(page.getByRole('button', { name: 'Wavefunction', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('heading', { name: 'Wavefunction & probability', exact: true })).toBeVisible()
   await expect(page.getByTestId('pane-wavefunction').locator('.pane-label > span')).toHaveText('WAVEFUNCTION & PROBABILITY')
-  await expect(page.getByRole('region', { name: 'Quantum state', exact: true }).locator('summary')).toHaveCount(0)
-  await page.getByRole('heading', { name: 'Quantum state', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Simulation mode', exact: true })).toContainText('Static mode')
   await expect(page.getByRole('spinbutton', { name: 'J', exact: true })).toBeVisible()
   await expect(page.locator('.state-steppers').first().locator('.stepper label sub')).toHaveText('J')
   for (const name of ['J', 'mJ']) {
@@ -218,7 +217,7 @@ test('double-clicking sliders restores exact defaults and constrained quantum st
   await j.dblclick(); await m.dblclick()
   await expect(page.getByRole('spinbutton', { name: 'J', exact: true })).toHaveValue('1')
   await expect(page.getByRole('spinbutton', { name: 'mJ', exact: true })).toHaveValue('0')
-  await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
+  await selectMode(page, 'superposition')
   for (const [name, expected] of [['Second J', '2'], ['Second mJ', '1']]) {
     const slider = page.getByRole('slider', { name, exact: true })
     await slider.focus(); await slider.press('End'); await slider.dblclick()

@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Atom, ChevronDown, ChevronRight, Expand, Layers3, MousePointer2, Orbit, RotateCcw, SlidersHorizontal, X } from 'lucide-react'
+import { ChevronDown, Expand, Layers3, MousePointer2, Orbit, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { Controls, type UpdateSettings } from './components/Controls'
 import { LiveDiagnostics as Diagnostics } from './components/Diagnostics'
 import { PhysicsPanel } from './components/PhysicsPanel'
 import { Scene } from './components/Scene'
-import { ClassicalControls, EnsembleControls, WavefunctionControls } from './components/SceneControls'
-import { MathText } from './components/UI'
+import { EnsembleControls, WavefunctionControls } from './components/SceneControls'
 import { type SampleStatistics } from './physics/sampling'
 import { MAX_HISTOGRAM_BINS } from './physics/histograms'
 import { createStatisticsStore } from './store/statistics'
 import { useQuantumPreparation } from './preparation/useQuantumPreparation'
 import { selectQuantumState } from './preparation/types'
-import { defaultSettings, surfaceColorMode, type Settings } from './types'
+import { defaultSettings, surfaceColorMode, type Settings, type SurfaceQuantity } from './types'
 import { QuantumTimeline } from './physics/evolution'
 import { addEffect } from '@react-three/fiber'
 import { WAVE_COLORS } from './rendering/wave-colors'
-import { FieldControls } from './components/FieldControls'
+import { ComparisonPanel } from './components/ComparisonPanel'
+import { useKeyboardShortcut } from './useKeyboardShortcut'
 
 const emptyStatistics = (): SampleStatistics => ({
   total: 0, histogram: Array(MAX_HISTOGRAM_BINS).fill(0), currentHistogram: Array(MAX_HISTOGRAM_BINS).fill(0),
@@ -26,7 +26,8 @@ const emptyStatistics = (): SampleStatistics => ({
 export default function App() {
   const [storedSettings, setSettings] = useState<Settings>(defaultSettings)
   // Fill newly added controls when Vite preserves an older state during refresh.
-  const settings: Settings = { ...defaultSettings, ...storedSettings, surfaceQuantity: (storedSettings.surfaceQuantity as string) === 'solidAngle' ? 'jointProbability' : storedSettings.surfaceQuantity ?? defaultSettings.surfaceQuantity }
+  const mode = storedSettings.mode ?? (storedSettings.coherentTransition ? 'transition' : storedSettings.superposition ? 'superposition' : 'static')
+  const settings: Settings = { ...defaultSettings, ...storedSettings, mode, superposition: mode === 'superposition', coherentTransition: mode === 'transition', surfaceQuantity: (storedSettings.surfaceQuantity as string) === 'solidAngle' ? 'jointProbability' : storedSettings.surfaceQuantity ?? defaultSettings.surfaceQuantity }
   const { prepared, pending, error, retry } = useQuantumPreparation(settings)
   const viewSettings: Settings = { ...settings, ...(prepared?.state ?? selectQuantumState(defaultSettings)) }
   const [timeline] = useState(() => new QuantumTimeline())
@@ -54,6 +55,11 @@ export default function App() {
   const setState = useCallback((j: number, m: number) => { setSettings(previous => ({ ...previous, j, m })) }, [])
   const onStats = useCallback((value: SampleStatistics) => statistics.publish(value), [statistics])
   const onFPS = useCallback((value: number) => setFPS(value), [])
+  useKeyboardShortcut(' ', () => update('ensemblePaused', !settings.ensemblePaused))
+  useKeyboardShortcut('w', () => {
+    const quantities: SurfaceQuantity[] = ['magnitude', 'probability', 'jointProbability', 'real', 'imaginary']
+    update('surfaceQuantity', quantities[(quantities.indexOf(settings.surfaceQuantity) + 1) % quantities.length])
+  })
   const showGuide = () => {
     if (!guide.current) return
     if (guide.current.open) guide.current.close()
@@ -92,14 +98,7 @@ export default function App() {
             <div className="stage-topbar"><div><Layers3 size={12} /><span>THE CLASSICAL–QUANTUM BOUNDARY</span></div><div className="viewport-tools"><button aria-label="Reset camera" title="Reset all cameras" onClick={() => update('cameraReset', settings.cameraReset + 1)}><RotateCcw size={14} /></button><button aria-label={fullScreen ? 'Exit fullscreen' : 'Enter fullscreen'} title="Toggle fullscreen" onClick={async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await stage.current?.requestFullscreen() } catch { /* Fullscreen is optional in embedded browsers. */ } }}><Expand size={14} /></button></div></div>
             <div className="preparation-status" role="status" data-testid="preparation-status">{error ? <><span>Could not update state: {error}</span><button onClick={retry}>Retry</button></> : pending ? <><i className="preparation-spinner" /><span>{settings.superposition ? 'Updating coherent superposition…' : <>Updating J = {settings.j}, m<sub>J</sub> = {settings.m}…</>}</span></> : null}</div>
             <div className="unified-scenes">
-              <div className="scene-column classical-column">
-              <div className="scene-pane classical-pane" data-testid="pane-classical">
-                <div className="pane-label"><Atom size={14} /><span>{viewSettings.coherentTransition ? 'ELECTRIC FIELD & DIPOLE' : viewSettings.superposition ? 'CLASSICAL ROTORS' : 'CLASSICAL ROTOR'}</span></div>
-                <div className="pane-canvas"><Scene mode={viewSettings.coherentTransition ? 'field' : 'classical'} settings={viewSettings} prepared={prepared} onStats={onStats} id="classical" timeline={timeline} /></div>
-                <p className="pane-note">{viewSettings.coherentTransition ? <span className="field-legend"><span className="field-electric">E/E₀</span><span className="field-dipole">⟨μ⟩/μ₀</span></span> : viewSettings.superposition ? <span className="component-legend"><i />State 1 <b />State 2</span> : viewSettings.j === 0 ? 'Stationary · J = 0' : 'Continuous deterministic motion'}</p>
-              </div>
-              {viewSettings.coherentTransition ? <FieldControls settings={viewSettings} timeline={timeline} /> : <ClassicalControls settings={settings} update={update} />}
-              </div>
+              <ComparisonPanel settings={viewSettings} update={update} onStats={onStats} timeline={timeline} prepared={prepared} />
               <div className="scene-column ensemble-column">
               <div className="scene-pane ensemble-pane" data-testid="pane-ensemble">
                 <div className="pane-label"><Layers3 size={15} /><span>QUANTUM PROBABILITY ENSEMBLE</span></div>
@@ -117,7 +116,7 @@ export default function App() {
               <WavefunctionControls settings={settings} update={update} />
               </div>
             </div>
-            <div className="stage-bottom"><span className="orbit-hint"><MousePointer2 size={13} /> Drag any view to orbit <i /> Scroll to zoom</span><span className="camera-status">Cameras synchronized</span><span className="fps-indicator"><i />{fps > 0 ? `${fps} FPS` : 'WEBGL'}<span>GPU accelerated</span></span></div>
+            <div className="stage-bottom"><span className="orbit-hint"><MousePointer2 size={13} /> Drag any view to orbit <i /> Scroll to zoom</span><span className="camera-status">Cameras linked · except Bloch</span><span className="fps-indicator"><i />{!settings.ensemblePaused && fps > 0 ? `${fps} FPS` : 'WEBGL'}<span>GPU accelerated</span></span></div>
           </section>
           <div className="analysis-panel">
             <Diagnostics j={viewSettings.j} m={viewSettings.m} store={statistics} frequency={settings.histogramFrequency} onFrequencyChange={value => update('histogramFrequency', value)} distribution={prepared?.distribution} evolving={evolving} onReset={() => update('resetStats', settings.resetStats + 1)} />
@@ -126,19 +125,30 @@ export default function App() {
         </div>
       </div>
     </main>
-    <dialog ref={guide} id="simulation-info" className="guide-dialog" aria-modal="true" aria-labelledby="simulation-info-title" onClose={() => setGuideOpen(false)} onClick={e => { if (e.target === e.currentTarget) guide.current?.close() }}>
-      <button className="dialog-close icon-button" autoFocus onClick={() => guide.current?.close()} aria-label="Close information"><X size={18} /></button>
-      <div className="eyebrow">ABOUT THE MODEL</div><h2 id="simulation-info-title">A laboratory for molecular rotation</h2>
-      <p>Hedione's Rigid Rotor Visualizer connects the motion of a rotating molecule with its quantum description. Three linked views let you compare classical motion, possible quantum orientations, and the shape of a rotational wavefunction.</p>
-      <div className="guide-grid">
-        <section><h3>Motion and driven rotation</h3><p>In Static mode, classical rotors follow definite trajectories at their quantum states’ energies. In Transition mode, this view shows the instantaneous driving electric field and the molecule’s quantum dipole expectation on the shared timeline.</p></section>
-        <section><h3>Probability ensemble</h3><p>The largest view shows independent samples of possible molecular orientations. Each batch follows the quantum probability, including the solid-angle weight sin θ. Resampling shows a distribution of possibilities rather than molecular trajectories.</p></section>
-        <section><h3>Wavefunction &amp; probability</h3><p>Explore normalized complex spherical harmonics, probability density, and real and imaginary components. Superposition mode combines amplitudes, so interference can change the orientation distribution. Time evolution keeps both quantum views on one shared clock.</p></section>
-        <section><h3>One shared molecular model</h3><p>Use the sidebar to change J and m<sub>J</sub>, combine states, choose a molecule, or edit masses, bond length, and permanent dipole. Electric-dipole transitions require a nonzero dipole and an allowed state pair. The charts compare sampled orientations with theory.</p><MathText block>{String.raw`I=\mu r^2,\qquad E_J=\frac{\hbar^2}{2I}J(J+1)`}</MathText></section>
-      </div>
-      <p className="guide-callout">A quantum state describes probabilities, not a hidden classical trajectory. Classical rotors provide an energy-matched comparison; coherent superpositions also include interference.</p>
-      <p className="guide-small">Drag any view to orbit and scroll to zoom. Double-click a slider to restore its default. RESET SIMULATION restores startup settings, cameras, clocks, and statistics. The classical display runs at 0.1 ps per display second at 1×; quantum evolution runs five times slower. Surface radii are normalized for display. Spherical harmonics use the Condon–Shortley convention.</p>
-      <button className="primary-button" onClick={() => guide.current?.close()}>Back to the experiment <ChevronRight size={15} /></button>
+    <dialog ref={guide} id="simulation-info" className="guide-dialog" aria-modal="true" aria-labelledby="simulation-info-title" onClose={() => setGuideOpen(false)} onKeyDown={event => {
+      if (event.key !== 'Tab') return
+      const controls = event.currentTarget.querySelectorAll<HTMLElement>('button, a[href]')
+      const first = controls[0], last = controls[controls.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }} onClick={event => {
+      if (event.target !== event.currentTarget) return
+      const bounds = event.currentTarget.getBoundingClientRect()
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) guide.current?.close()
+    }}>
+      <button className="dialog-close" type="button" autoFocus onClick={() => guide.current?.close()} aria-label="Close information">×</button>
+      <div className="eyebrow">ABOUT THE VISUALIZER</div><h2 id="simulation-info-title">A laboratory for molecular rotation</h2>
+      <p>Explore molecular rotation through classical motion, quantum orientation probabilities, and rotational wavefunctions. Choose Static, Superposition, or ideal Transition mode to compare states, interference, and phase. Use the Bloch sphere to inspect two-state populations and relative phase.</p>
+      <p>Visit the <a href="https://github.com/Hedione/Quantum-Rigid-Rotor-Visualizer" target="_blank" rel="noopener noreferrer">project on GitHub</a>.</p>
+      <section className="guide-shortcuts" aria-labelledby="shortcuts-title">
+        <h3 id="shortcuts-title">Keyboard shortcuts</h3>
+        <dl>
+          <div><dt><kbd>Space</kbd></dt><dd>Pause / resume sampling</dd></div>
+          <div><dt><kbd>R</kbd></dt><dd>Randomize quantum numbers</dd></div>
+          <div><dt><kbd>W</kbd></dt><dd>Cycle wavefunction, probability density, joint density, real, and imaginary views</dd></div>
+          <div><dt><kbd>/</kbd></dt><dd>Toggle Field &amp; dipole / Bloch sphere in Transition, or Classical rotors / Bloch sphere in Superposition</dd></div>
+        </dl>
+      </section>
     </dialog>
   </div>
 }

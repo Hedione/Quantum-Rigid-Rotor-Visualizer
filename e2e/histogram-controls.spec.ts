@@ -1,3 +1,4 @@
+import { selectMode } from './controls'
 import { expect, test } from '@playwright/test'
 
 declare global { interface Window { histogramPreparations: number } }
@@ -59,7 +60,7 @@ test('histogram resolution preserves samples and evolution has an independent sp
   await expect(page.getByTestId('cumulative-samples')).toHaveText(total!)
   expect(await page.evaluate(() => window.histogramPreparations)).toBe(preparations)
   await diagnostics.screenshot({ path: 'test-results/histogram-bins-desktop.png' })
-  await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
+  await selectMode(page, 'superposition')
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await expect(page.getByTestId('superposition-controls')).not.toContainText('Adding amplitudes creates interference')
   const evolution = page.getByRole('button', { name: 'Evolve in time', exact: true })
@@ -110,7 +111,7 @@ test('histogram resolution preserves samples and evolution has an independent sp
     const heading = row.locator('.control-label')
     const titleBox = await heading.locator(':scope > span').first().boundingBox()
     const rateBox = await heading.locator('.range-physical-value').boundingBox(), multiplierBox = await heading.locator('output').boundingBox()
-    expect(titleBox!.height).toBe(15)
+    expect(titleBox!.height).toBe(13.5)
     expect(titleBox!.y + titleBox!.height).toBeLessThanOrEqual(rateBox!.y)
     expect(rateBox!.x).toBeGreaterThanOrEqual(sliderBox!.x)
     expect(rateBox!.x + rateBox!.width).toBeLessThanOrEqual(multiplierBox!.x)
@@ -138,7 +139,7 @@ test('lowering histogram sampling reduces recorded batches while quantum time ke
   await page.goto('/')
   const stage = page.getByRole('region', { name: 'Unified classical and quantum rotor experiment' })
   await expect(stage).toHaveAttribute('aria-busy', 'false')
-  await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
+  await selectMode(page, 'superposition')
   await expect(stage).toHaveAttribute('data-superposition', 'true')
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await expect(page.getByRole('button', { name: 'Evolve in time', exact: true })).toHaveAttribute('aria-pressed', 'true')

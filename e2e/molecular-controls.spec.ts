@@ -79,7 +79,7 @@ test('unequal masses update both rotors and energy while palette and occlusion r
   }
   await mass2.fill('2')
   await expect(match).toHaveAttribute('aria-pressed', 'false')
-  await expect(match).toHaveCSS('background-color', 'rgb(16, 25, 30)')
+  await expect(match).toHaveCSS('background-color', 'rgb(10, 21, 27)')
   await page.locator('.mass-matching-control').screenshot({ path: 'test-results/mass-matching-row-mobile.png' })
   await page.screenshot({ path: 'test-results/molecular-controls-mobile.png', fullPage: true })
   expect(errors).toEqual([])

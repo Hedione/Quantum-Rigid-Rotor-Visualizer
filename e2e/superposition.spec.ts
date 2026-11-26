@@ -1,3 +1,4 @@
+import { selectMode } from './controls'
 import { expect, test, type Page } from '@playwright/test'
 
 async function selectPair(page: Page, j: number, m: number, j2: number, m2: number) {
@@ -13,14 +14,9 @@ test('coherent superpositions show two classical comparisons and nonuniform azim
   await page.goto('/')
   const stage = page.getByRole('region', { name: 'Unified classical and quantum rotor experiment' })
   await expect(stage).toHaveAttribute('aria-busy', 'false')
-  const toggle = page.getByRole('button', { name: 'Superposition mode', exact: true })
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
-  await expect(page.getByRole('switch', { name: 'Superposition mode', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('spinbutton', { name: 'Second J', exact: true })).toBeVisible()
-  await expect(page.getByRole('spinbutton', { name: 'Second J', exact: true })).toBeDisabled()
+  await expect(page.getByRole('spinbutton', { name: 'Second J', exact: true })).toHaveCount(0)
   await expect(page.getByTestId('scene-classical')).toHaveAttribute('data-rotor-count', '1')
-  await toggle.click()
-  await expect(page.getByRole('button', { name: 'Superposition mode', exact: true })).toHaveAttribute('aria-expanded', 'true')
+  await selectMode(page, 'superposition')
   await expect(stage).toHaveAttribute('data-superposition', 'true')
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await expect(page.getByRole('button', { name: 'Evolve in time', exact: true })).toHaveAttribute('aria-pressed', 'true')
@@ -78,7 +74,7 @@ test('the second state stays independent, is capped safely, and disabling superp
   await page.goto('/')
   const stage = page.getByRole('region', { name: 'Unified classical and quantum rotor experiment' })
   await expect(stage).toHaveAttribute('aria-busy', 'false')
-  await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
+  await selectMode(page, 'superposition')
   await expect(stage).toHaveAttribute('data-superposition', 'true')
   const secondJ = page.getByRole('spinbutton', { name: 'Second J', exact: true })
   const secondM = page.getByRole('spinbutton', { name: 'Second mJ', exact: true })
@@ -116,7 +112,7 @@ test('the second state stays independent, is capped safely, and disabling superp
     await expect(stage).toHaveAttribute('aria-busy', 'false')
     await expect(page.getByTestId('scene-classical')).toHaveAttribute('data-rotor-count', '2')
   }
-  await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
+  await selectMode(page, 'static')
   await expect(stage).toHaveAttribute('data-superposition', 'false')
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await expect(page.getByTestId('scene-classical')).toHaveAttribute('data-rotor-count', '1')

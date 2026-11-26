@@ -12,9 +12,11 @@ The visualizer runs in the browser and includes controls for individual eigensta
 - **Quantum probability ensemble:** Up to 10,000 independently sampled molecular orientations, drawn from the quantum probability distribution. The central view makes the distribution visible as a cloud of rigid rotors.
 - **Wavefunction & probability:** A radial surface showing magnitude, probability density, joint angular probability, real component, or imaginary component, with a quantity-specific color legend.
 
-Drag to orbit and scroll or pinch to zoom. Cameras stay synchronized and the z axis stays visible. Each view has its own controls directly underneath it, and the layout adapts to smaller screens.
+Drag to orbit and scroll or pinch to zoom. Molecular views share their cameras; the dimensionless Bloch sphere has its own camera. The z axis stays visible in molecular views. Each view has its own controls directly underneath it, and the layout adapts to smaller screens.
 
 ## Explore quantum states
+
+Use the orange **SIMULATION MODE** picker to choose **Static mode**, **Superposition mode**, or **Transition mode**. Each mode remembers its quantum numbers, molecular settings, and evolution controls. Static is the startup mode.
 
 Select integer quantum numbers **J** and **m<sub>J</sub>**, with **−J ≤ m<sub>J</sub> ≤ J**, using number fields or sliders. The standard range is J = 0–10. **Explore high J** extends the range to 50 while keeping both selected states unchanged. Turning it off restores the primary and secondary quantum-number selections from before high-J exploration was enabled.
 
@@ -38,7 +40,7 @@ Try these examples:
 | (2, +2) | (2, −2) | A four-lobe pattern around the z axis |
 | (1, 0) | (2, +1) | Interference between different energies; evolves in time by default |
 
-Select these examples through the quantum-number fields. Second-state controls stay visible and gray when Superposition mode is off; re-enabling it restores editing. The yellow **Randomize** button, between **Previous** and **Explore high J**, chooses a valid state within the active range. With Superposition mode on it randomizes both states; with it off it randomizes the primary state and retains the disabled secondary selection.
+Select these examples through the quantum-number fields in Superposition mode. The second-state editor appears only in this mode. The yellow **Randomize** button chooses a valid state within the active range: the primary state in Static, both states in Superposition, and an allowed initial/final pair in Transition.
 
 Enable **Evolve in time** to apply each state's energy-dependent phase:
 
@@ -46,11 +48,26 @@ Enable **Evolve in time** to apply each state's energy-dependent phase:
 ψ(θ, φ, t) = [Y₁ exp(−iE₁t/ℏ) + Y₂ exp(−iE₂t/ℏ)] / √2
 ```
 
-The ensemble and surface use the same quantum clock. Different energies can produce a changing interference pattern. Equal-energy superpositions retain a stationary probability distribution while their overall complex phase evolves. Time evolution is on by default for both eigenstates and superpositions, with its controls above Superposition mode. A single eigenstate's global phase changes its phase coloring and real/imaginary components while its magnitude and probability remain fixed. Evolution speed ranges from **0.01× to 100×**, with **1×** as the default. The slider shows physical femtoseconds per on-screen second: **20 fs/s** at 1×. Its companion toggle disables and grays out the slider when off. The quantum display clock is five times slower than the classical clock to make interference easier to follow. Pausing ensemble sampling also freezes quantum evolution.
+The ensemble and surface use the same quantum clock. Different energies can produce a changing interference pattern. Equal-energy superpositions retain a stationary probability distribution while their overall complex phase evolves. Time evolution is on by default for both eigenstates and superpositions, with playback controls below the active state editors. A single eigenstate's global phase changes its phase coloring and real/imaginary components while its magnitude and probability remain fixed. Evolution speed ranges from **0.01× to 100×**, with **1×** as the default. The slider shows physical femtoseconds per on-screen second: **20 fs/s** at 1×. Its companion toggle disables and grays out the slider when off. The quantum display clock is five times slower than the classical clock to make interference easier to follow. Pausing ensemble sampling also freezes quantum evolution.
+
+## Bloch sphere and keyboard shortcuts
+
+In Superposition and Transition modes, the left view has tabs for its classical/field comparison and the **Bloch sphere**. The sphere shows the two selected rotational-state amplitudes, populations, and relative laboratory-frame phase. It does not show molecular orientation or spin. North represents state 1; south represents state 2. Identical selections do not define a two-state sphere, so the vector is hidden until distinct states are selected.
+
+The Bloch vector follows the same quantum clock as the ensemble and wavefunction, including pause, pulse scrubbing, and looping. Its camera can orbit, pan, and zoom independently; Reset camera restores all cameras. Arrow keys and Home/End navigate the comparison tabs.
+
+| Key | Action |
+| --- | --- |
+| Space | Pause / resume sampling and the shared quantum clock |
+| R | Randomize the active mode's quantum numbers |
+| W | Cycle wavefunction, probability density, joint density, real, and imaginary views |
+| / | Toggle the classical/field comparison and Bloch sphere in paired modes |
+
+Shortcuts leave editable fields and open dialogs alone. Space takes priority over focused buttons and range sliders. The information button opens a concise project overview, repository link, and these shortcuts.
 
 ## Coherent transitions
 
-Use the orange **Switch to Transition mode** button beside the **01 Quantum state** title to open the coherent-transition controls for an ideal resonant π-pulse. **Switch to Static mode** returns to the single-state and superposition controls. Each mode shows its own controls and shares the complex harmonic evaluator, surface renderer, sampler, and quantum timeline. The first transition is **(1, +1) → (2, 0)** with **σ−** polarization.
+Choose **Transition mode** in the simulation-mode picker to open the ideal resonant π-pulse controls. Select **Static mode** or **Superposition mode** to return to free evolution. All modes share the complex harmonic evaluator, surface renderer, sampler, and quantum timeline. The first transition is **(1, +1) → (2, 0)** with **σ−** polarization.
 
 ```text
 ci(t) = cos(Ωt/2), cf(t) = −i exp(iφd) sin(Ωt/2)
@@ -78,7 +95,7 @@ Transition validation integrates the existing signed harmonics against C¹q = �
 
 Set the permanent **Dipole moment** under Particles & bond, from **0–10 D** in Static mode and **0.00001–10 D** in Transition mode (1 D = 3.33564 × 10⁻³⁰ C m). Entering Transition with H₂ automatically applies the complete CO preset, and H₂ is disabled in this mode. The original Static molecule's masses, bond length, mass matching, and dipole are restored on return, including custom settings. A custom zero-dipole model keeps its geometry and uses the positive minimum during Transition. HF uses **1.827 D** and CO **0.112 D**, from [NIST's experimental dipole table](https://cccbdb.nist.gov/diplistx.asp). HD uses the weak isotope-induced value **approximately 0.00083 D**, as reported by [Maio et al., footnote 1](https://wwwmpa.mpa-garching.mpg.de/mpa/publications/preprints/pp2007/MPA2187.pdf). Presets apply masses, bond length, and dipole together; each remains editable.
 
-This is the isolated, exact-resonance rotating-wave model with no relaxation or decoherence. Ω is the effective coupling strength. For angular matrix element d = ⟨f|C¹q|i⟩, E₀ = ℏΩ/(μ₀|d|) for linear polarization and ℏΩ/(√2 μ₀|d|) for the constant-magnitude circular field. The electric-field magnitude is illustrative and does not represent a realistic experimental field. Typical laboratory fields and resulting Rabi rates are much smaller, making transitions hard to follow at this visualization's time scale. For context, [rotational-state control experiments](https://www.nature.com/articles/s41467-025-62275-y) report microwave Rabi rates around 10 kHz; actual rates depend on the molecule and drive strength. Real degenerate rotors may couple additional m states; their multilevel dynamics are outside this two-level model. Instantaneous and cumulative diagnostic curves include both changing populations and complex interference. High J exploration is available only in Static mode; Transition mode limits both J editors to 10.
+This is the isolated, exact-resonance rotating-wave model with no relaxation or decoherence. Ω is the effective coupling strength. For angular matrix element d = ⟨f|C¹q|i⟩, E₀ = ℏΩ/(μ₀|d|) for linear polarization and ℏΩ/(√2 μ₀|d|) for the constant-magnitude circular field. The electric-field magnitude is illustrative and does not represent a realistic experimental field. Typical laboratory fields and resulting Rabi rates are much smaller, making transitions hard to follow at this visualization's time scale. For context, [rotational-state control experiments](https://www.nature.com/articles/s41467-025-62275-y) report microwave Rabi rates around 10 kHz; actual rates depend on the molecule and drive strength. Real degenerate rotors may couple additional m states; their multilevel dynamics are outside this two-level model. Instantaneous and cumulative diagnostic curves include both changing populations and complex interference. High J exploration is available in Static and Superposition modes; Transition mode limits both J editors to 10.
 
 The **Photon frequency** readout in Field & dipole shows the resonant frequency **f = |Ef − Ei| / h**, with **Photon wavelength λ = c/f** beside it. Readouts choose SI prefixes automatically, using up to three significant digits: for example, **230 GHz**, **3.77 THz**, **79.5 µm**, or **1.3 mm**. Electric-field and dipole readouts use the same formatting. Frequency and wavelength depend on the energy gap, independently of the Rabi frequency and playback multiplier.
 

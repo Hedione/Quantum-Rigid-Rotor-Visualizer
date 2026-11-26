@@ -1,3 +1,4 @@
+import { selectMode } from './controls'
 import { expect, test } from '@playwright/test'
 
 test('the default energy ladder shows J=0–3 with gaps proportional to the actual energy differences', async ({ page }) => {
@@ -38,7 +39,7 @@ test('high occupied energies have explicit scale breaks, with degenerate J state
   await expect(stage).toHaveAttribute('data-displayed-j', '8')
   await expect(ladder.locator('.ladder > div > span')).toHaveText(['J = 8', 'J = 3', 'J = 2', 'J = 1', 'J = 0'])
   await expect(ladder.getByLabel('Energy scale break')).toHaveCount(1)
-  await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
+  await selectMode(page, 'superposition')
   const secondary = page.getByRole('spinbutton', { name: 'Second J', exact: true })
   await secondary.fill('6'); await secondary.press('Enter')
   await expect(stage).toHaveAttribute('data-displayed-j2', '6')
@@ -61,7 +62,7 @@ test('high occupied energies have explicit scale breaks, with degenerate J state
   await expect(ladder.locator('.ladder > div > span')).toHaveText(['J = 8', 'J = 3', 'J = 2', 'J = 1', 'J = 0'])
   await expect(ladder.locator('.ladder > div.current')).toHaveCount(1)
   await expect(ladder.getByLabel('Energy scale break')).toHaveCount(1)
-  await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
+  await selectMode(page, 'static')
   await expect(stage).toHaveAttribute('data-superposition', 'false')
   await expect(ladder.getByLabel('Energy scale break')).toHaveCount(1)
 })

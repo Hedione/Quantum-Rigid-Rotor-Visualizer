@@ -1,11 +1,13 @@
 import { defaultRabiFrequency } from './physics/transition'
 
-export type SceneKind = 'wavefunction' | 'ensemble' | 'classical' | 'field'
+export type SceneKind = 'wavefunction' | 'ensemble' | 'classical' | 'field' | 'bloch'
+export type SimulationMode = 'static' | 'superposition' | 'transition'
 export type SurfaceQuantity = 'magnitude' | 'probability' | 'jointProbability' | 'real' | 'imaginary'
 export type RotorPalette = 'greenViolet' | 'blueOrange' | 'mint' | 'custom'
 export type Polarization = 'pi' | 'sigmaPlus' | 'sigmaMinus'
 export const surfaceColorMode = (quantity: SurfaceQuantity) => quantity === 'magnitude' ? 'phase' : quantity === 'real' || quantity === 'imaginary' ? 'sign' : 'density'
 export interface Settings {
+  mode: SimulationMode;
   highJ: boolean;
   j: number; m: number; count: number; frequency: number; histogramFrequency: number; rotorOpacity: number;
   superposition: boolean; j2: number; m2: number; timeEvolution: boolean; quantumPlayback: number;
@@ -19,6 +21,7 @@ export interface Settings {
   cameraReset: number;
 }
 export const defaultSettings: Settings = {
+  mode: 'static',
   highJ: false,
   j: 1, m: 0, count: 5000, frequency: 30, histogramFrequency: 10, rotorOpacity: 0.01,
   superposition: false, j2: 2, m2: 1, timeEvolution: true, quantumPlayback: 1,

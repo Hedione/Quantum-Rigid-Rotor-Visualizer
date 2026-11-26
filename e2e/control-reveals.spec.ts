@@ -1,24 +1,20 @@
+import { selectMode } from './controls'
 import { expect, test } from '@playwright/test'
 
-test('second-state controls remain visible while disabled and retain edits when re-enabled', async ({ page }) => {
+test('separate superposition controls retain edits across mode changes', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('[aria-busy]')).toHaveAttribute('aria-busy', 'false')
   await expect(page.locator('.constants')).toHaveCount(0)
   await expect(page.getByText('Constants & molecular model', { exact: true })).toHaveCount(0)
   await expect(page.getByText(/Both particles have the same mass|Bond length updates all three views|Presets use rounded molecular parameters/)).toHaveCount(0)
-  const superposition = page.getByRole('button', { name: 'Superposition mode', exact: true })
   const secondJ = page.getByRole('spinbutton', { name: 'Second J', exact: true })
-  await expect(secondJ).toBeVisible()
-  await expect(secondJ).toBeDisabled()
-  await expect(page.getByTestId('superposition-controls')).toHaveCSS('opacity', '0.45')
-  await superposition.click()
+  await expect(secondJ).toHaveCount(0)
+  await selectMode(page, 'superposition')
   await expect(secondJ).toBeEnabled()
   await secondJ.fill('3'); await secondJ.press('Enter')
-  await superposition.click()
-  await expect(secondJ).toBeVisible()
-  await expect(secondJ).toBeDisabled()
-  await expect(secondJ).toHaveValue('3')
-  await superposition.click()
+  await selectMode(page, 'static')
+  await expect(secondJ).toHaveCount(0)
+  await selectMode(page, 'superposition')
   await expect(secondJ).toHaveValue('3')
   await expect(secondJ).toBeEnabled()
   const match = page.getByRole('button', { name: 'Match particle 1', exact: true })
@@ -40,7 +36,7 @@ test('second-state controls remain visible while disabled and retain edits when 
 test('reduced motion reveals dependent controls without animation', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
-  await page.getByRole('button', { name: 'Superposition mode', exact: true }).click()
+  await selectMode(page, 'superposition')
   await expect(page.getByTestId('superposition-controls')).toHaveCSS('animation-name', 'none')
   await expect(page.getByRole('spinbutton', { name: 'Second J', exact: true })).toBeEnabled()
   await page.getByRole('spinbutton', { name: 'Particle 2 mass exact value', exact: true }).fill('2')

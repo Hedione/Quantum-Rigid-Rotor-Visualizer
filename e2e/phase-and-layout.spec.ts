@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { setRotorCount } from './controls'
+import { setRotorCount, selectMode } from './controls'
 import { HBAR, molecularParameters, quantumQuantities } from '../src/physics/quantum'
 import { QUANTUM_TIME_SCALE } from '../src/physics/evolution'
 
@@ -28,8 +28,6 @@ test('single eigenstates evolve in phase while probability remains stationary an
   await expect(page.getByTestId('quantum-time')).toBeHidden()
   await expect(page.getByTestId('quantum-time')).toHaveText('')
   await expect(page.locator('.evolution-elapsed')).toHaveCount(0)
-  const superposition = page.getByRole('button', { name: 'Superposition mode', exact: true })
-  expect((await evolution.boundingBox())!.y).toBeLessThan((await superposition.boundingBox())!.y)
   for (const button of [evolution, page.getByRole('button', { name: 'Explore high J', exact: true })]) {
     await expect(button.locator('.toggle-state')).toHaveCount(0)
     await expect(button.locator('.toggle-label')).toHaveCSS('text-align', 'center')
@@ -37,9 +35,9 @@ test('single eigenstates evolve in phase while probability remains stationary an
   await expect(page.locator('.pane-label small')).toHaveCount(0)
   for (const name of ['Color by complex phase', 'z axis', 'Synchronize cameras']) await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0)
   await expect(page.getByText('Scene settings', { exact: true })).toHaveCount(0)
-  await superposition.click()
+  await selectMode(page, 'superposition')
   await expect(page.getByTestId('superposition-controls').getByRole('math')).toHaveCount(0)
-  await superposition.click()
+  await selectMode(page, 'static')
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await page.getByRole('button', { name: 'Pause sampling', exact: true }).click()
   await setRotorCount(page, 100)

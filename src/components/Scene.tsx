@@ -16,6 +16,7 @@ import type { QuantumTimeline } from '../physics/evolution'
 import { MAX_HISTOGRAM_BINS } from '../physics/histograms'
 import { dipoleExpectation, electricField, electromagneticWave, transitionDipole, transitionRates, validateTransition } from '../physics/transition'
 import { initialCoefficients } from '../physics/superposition'
+import { blochState } from '../physics/bloch'
 import { applyCameraView, CAMERA_FOV, INITIAL_CAMERA, orthographicViewZoom, readCameraView, type CameraView } from '../rendering/camera'
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0)
@@ -23,14 +24,14 @@ const SYNC = new EventTarget()
 interface CameraDetail extends CameraView { source: string }
 
 /** Canvas sprites keep labels in the same renderer lifecycle as their scene. */
-function AxisLabel({ position, children, momentum = false, color, hideNearTop = false }: { position: Vec3; children: string; momentum?: boolean; color?: string; hideNearTop?: boolean }) {
+function AxisLabel({ position, children, momentum = false, color, hideNearTop = false, size = 0.25 }: { position: Vec3; children: string; momentum?: boolean; color?: string; hideNearTop?: boolean; size?: number }) {
   const sprite = useRef<THREE.Sprite>(null)
   const viewDirection = useMemo(() => new THREE.Vector3(), [])
   const texture = useMemo(() => {
     const canvas = document.createElement('canvas')
     canvas.width = canvas.height = 128
     const context = canvas.getContext('2d')!
-    context.font = momentum ? 'italic 76px Georgia' : '500 70px Arial'
+    context.font = momentum ? 'italic 76px Georgia' : '500 70px "DM Mono", monospace'
     context.textAlign = 'center'
     context.textBaseline = 'middle'
     context.fillStyle = color ?? (momentum ? '#f0be8b' : '#8da6b6')
@@ -48,10 +49,10 @@ function AxisLabel({ position, children, momentum = false, color, hideNearTop = 
     sprite.current.material.opacity = opacity
     sprite.current.visible = opacity > 0
   })
-  return <sprite ref={sprite} position={position} scale={[0.25, 0.25, 1]} renderOrder={10}><spriteMaterial map={texture} transparent depthTest={false} depthWrite={false} /></sprite>
+  return <sprite ref={sprite} position={position} scale={[size, size, 1]} renderOrder={10}><spriteMaterial map={texture} transparent depthTest={false} depthWrite={false} /></sprite>
 }
 
-function CameraController({ settings, id, fitScale }: { settings: Settings; id: string; fitScale: number }) {
+function CameraController({ settings, id, fitScale, independent = false }: { settings: Settings; id: string; fitScale: number; independent?: boolean }) {
   const controls = useRef<OrbitControlsImpl>(null)
   const busy = useRef(false)
   const camera = useThree(s => s.camera)
@@ -59,7 +60,9 @@ function CameraController({ settings, id, fitScale }: { settings: Settings; id: 
   // Preserve a common orbit while fitting the smaller flank viewports.
   const fit = Math.max(1, size.height / Math.max(1, size.width) * 0.95) * Math.max(1, fitScale)
   const baseZoom = orthographicViewZoom(size.height, fit)
-  const saved = useRef<CameraView>({ position: [...INITIAL_CAMERA], target: [0, 0, 0] })
+  const linkedView = useRef<CameraView>({ position: [...INITIAL_CAMERA], target: [0, 0, 0] })
+  const blochView = useRef<CameraView>({ position: [...INITIAL_CAMERA], target: [0, 0, 0] })
+  const saved = independent ? blochView : linkedView
   const previousReset = useRef(-1)
   const appliedCamera = useRef<typeof camera | null>(null)
   const applyView = useCallback((view: CameraView) => {
@@ -71,10 +74,11 @@ function CameraController({ settings, id, fitScale }: { settings: Settings; id: 
     controls.current?.update()
     appliedCamera.current = camera
     busy.current = false
-  }, [camera, fit, baseZoom, fitScale, size.width, size.height])
+  }, [camera, fit, baseZoom, fitScale, size.width, size.height, independent])
   useEffect(() => {
     if (previousReset.current !== settings.cameraReset) {
-      saved.current = { position: [...INITIAL_CAMERA], target: [0, 0, 0] }
+      linkedView.current = { position: [...INITIAL_CAMERA], target: [0, 0, 0] }
+      blochView.current = { position: [...INITIAL_CAMERA], target: [0, 0, 0] }
       previousReset.current = settings.cameraReset
     }
     applyView(saved.current)
@@ -83,19 +87,19 @@ function CameraController({ settings, id, fitScale }: { settings: Settings; id: 
     const sync = (event: Event) => {
       const detail = (event as CustomEvent<CameraDetail>).detail
       if (detail.source === id) return
-      saved.current = detail
-      applyView(detail)
+      linkedView.current = detail
+      if (!independent) applyView(detail)
     }
     SYNC.addEventListener('camera', sync)
     return () => SYNC.removeEventListener('camera', sync)
-  }, [applyView, id])
+  }, [applyView, id, independent])
   const referenceDistance = Math.hypot(...INITIAL_CAMERA)
   return <OrbitControls ref={controls} makeDefault enableDamping dampingFactor={0.12} minDistance={3.2 * fit} maxDistance={16 * fit} minZoom={baseZoom * referenceDistance / 16} maxZoom={baseZoom * referenceDistance / 3.2}
     onChange={() => {
       if (!busy.current && appliedCamera.current === camera && controls.current) {
         const view = readCameraView(camera, controls.current.target, fit, baseZoom)
         saved.current = view
-        SYNC.dispatchEvent(new CustomEvent('camera', { detail: { source: id, ...view } }))
+        if (!independent) SYNC.dispatchEvent(new CustomEvent('camera', { detail: { source: id, ...view } }))
       }
     }} />
 }
@@ -231,6 +235,37 @@ function QuantumEnsemble({ settings, onStats, timeline }: { settings: Settings; 
   </group>
 }
 
+function BlochSphere({ settings, timeline }: { settings: Settings; timeline: QuantumTimeline }) {
+  const radius = 1.8
+  const tip = useRef<THREE.Mesh>(null)
+  const direction = useMemo(() => new THREE.Vector3(), [])
+  const arrow = useMemo(() => new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(), radius, '#35d3e4', 0.18, 0.1), [])
+  const circle = useMemo(() => Array.from({ length: 97 }, (_, i) => [radius * Math.cos(i * Math.PI / 48), radius * Math.sin(i * Math.PI / 48), 0] as Vec3), [])
+  useEffect(() => () => arrow.dispose(), [arrow])
+  useFrame(() => {
+    const state = blochState(settings, timeline.frame.coefficients)
+    arrow.visible = !!state
+    if (tip.current) tip.current.visible = !!state
+    if (!state) return
+    direction.set(state.x, state.y, state.z).normalize()
+    arrow.setDirection(direction)
+    tip.current?.position.copy(direction).multiplyScalar(radius)
+  })
+  return <>
+    <mesh><sphereGeometry args={[radius, 32, 20]} /><meshBasicMaterial color="#718792" transparent opacity={0.07} depthWrite={false} /></mesh>
+    {([[0, 0, 0], [Math.PI / 2, 0, 0], [0, Math.PI / 2, 0]] as Vec3[]).map((rotation, i) => <Line key={i} points={circle} rotation={rotation} color="#718792" transparent opacity={0.55} lineWidth={0.8} />)}
+    <Line points={[[-2, 0, 0], [2, 0, 0]]} color="#ff6666" transparent opacity={0.5} dashed dashSize={0.06} gapSize={0.06} lineWidth={0.8} />
+    <Line points={[[0, -2, 0], [0, 2, 0]]} color="#65dc78" transparent opacity={0.5} dashed dashSize={0.06} gapSize={0.06} lineWidth={0.8} />
+    <Line points={[[0, 0, -2], [0, 0, 2]]} color="#6e8cff" transparent opacity={0.5} dashed dashSize={0.06} gapSize={0.06} lineWidth={0.8} />
+    <AxisLabel position={[2.15, 0, 0]} color="#ff6666" size={0.3}>X</AxisLabel>
+    <AxisLabel position={[0, 2.15, 0]} color="#65dc78" size={0.3}>Y</AxisLabel>
+    <AxisLabel position={[0, 0, 2.15]} color="#ffb547" size={0.35}>|1⟩</AxisLabel>
+    <AxisLabel position={[0, 0, -2.15]} color="#8faaf0" size={0.35}>|2⟩</AxisLabel>
+    <primitive object={arrow} />
+    <mesh ref={tip}><sphereGeometry args={[0.065, 16, 12]} /><meshBasicMaterial color="#78cda0" /></mesh>
+  </>
+}
+
 function DrivenField({ settings, timeline }: { settings: Settings; timeline: QuantumTimeline }) {
   const electricLabel = useRef<THREE.Group>(null), dipoleLabel = useRef<THREE.Group>(null)
   const arrows = useMemo(() => [new THREE.ArrowHelper(Y_AXIS, new THREE.Vector3(), 1, '#35d3e4'), new THREE.ArrowHelper(Y_AXIS, new THREE.Vector3(), 1, '#ffb547')], [])
@@ -354,15 +389,16 @@ export function Scene({ mode, settings, prepared, onStats, id, onFPS, timeline }
     return next
   }, [orthographic])
   const evolving = settings.coherentTransition || (settings.timeEvolution && (settings.j > 0 || (settings.superposition && settings.j2 > 0)) && (surfaceColorMode(settings.surfaceQuantity) !== 'density' || (settings.superposition && settings.j !== settings.j2)))
-  const bondScale = mode === 'field' ? 1 : settings.bondLength / defaultSettings.bondLength
+  const bondScale = mode === 'field' || mode === 'bloch' ? 1 : settings.bondLength / defaultSettings.bondLength
   const zeroComponent = !evolving && mode === 'wavefunction' && (settings.surfaceQuantity === 'real' || settings.surfaceQuantity === 'imaginary') && prepared?.surface.boundingSphere?.radius === 0
   return <div className="canvas-container" data-testid={`scene-${mode}`} data-bond-length={settings.bondLength} data-display-scale={bondScale} data-rotor-count={mode === 'ensemble' ? settings.count : mode === 'classical' ? settings.superposition ? 2 : 1 : undefined} data-first-mass-fraction={mode !== 'wavefunction' ? getMolecularParameters(settings).firstFraction : undefined} data-particle-occlusion={mode === 'ensemble' ? settings.particleOcclusion : undefined} data-rotor-palette={mode === 'ensemble' ? settings.rotorPalette : undefined}>
     <SceneBoundary>{mounted && <Canvas orthographic={orthographic} frameloop={mode === 'wavefunction' && !evolving ? 'demand' : 'always'} dpr={[1, 1.5]} camera={camera} gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}>
-      <Laboratory bondScale={bondScale} />
-      <CameraController settings={settings} id={id} fitScale={mode === 'field' ? 1.2 : bondScale} />
+      {mode !== 'bloch' && <Laboratory bondScale={bondScale} />}
+      <CameraController settings={settings} id={id} fitScale={mode === 'field' ? 1.2 : bondScale} independent={mode === 'bloch'} />
       {mode === 'wavefunction' && prepared && <group scale={bondScale}><Surface geometry={prepared.surface} timeline={timeline} evolving={evolving} coherent={settings.coherentTransition} /></group>}
       {mode === 'ensemble' && prepared && <>{prepared.overlay && <group scale={bondScale}><Surface geometry={prepared.overlay} overlay timeline={timeline} evolving={settings.coherentTransition} coherent={settings.coherentTransition} /></group>}<QuantumEnsemble settings={settings} onStats={onStats} timeline={timeline} /></>}
       {mode === 'classical' && <><ClassicalRotor settings={settings} />{settings.superposition && <ClassicalRotor settings={settings} second />}</>}
+      {mode === 'bloch' && <BlochSphere settings={settings} timeline={timeline} />}
       {mode === 'field' && <DrivenField settings={settings} timeline={timeline} />}
       {onFPS && <FrameRate onFPS={onFPS} />}
     </Canvas>}</SceneBoundary>
